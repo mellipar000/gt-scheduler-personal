@@ -50,6 +50,8 @@ export type ICS = {
 export interface Combination {
   // Additional CRNs; the full schedule also includes the caller's pinned CRNs.
   crns: string[];
+  // Full selection for ranking, including pinned sections.
+  scheduledCrns?: string[];
   startMap: Record<string, number>;
   endMap: Record<string, number>;
 }

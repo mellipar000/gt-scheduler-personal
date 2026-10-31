@@ -24,7 +24,7 @@ import {
 import { ErrorWithFields, softError } from '../../log';
 import { CLOUD_FUNCTION_BASE_URL } from '../../constants';
 import { PlannedCountsData } from '../types';
-import { getTravel } from '../../utils/mapbox/misc';
+import scheduleMetrics, { ScheduleMetrics } from './scheduleMetrics';
 
 const PLANNED_COUNTS_API_URL = `${CLOUD_FUNCTION_BASE_URL}/getPlannedCounts`;
 
@@ -67,6 +67,24 @@ export default class Oscar {
   sortingOptions: SortingOption[];
 
   plannedCounts: PlannedCountsData | undefined;
+
+  private metricCache = new WeakMap<Combination, ScheduleMetrics>();
+
+  private metrics(combination: Combination): ScheduleMetrics {
+    let metrics = this.metricCache.get(combination);
+    if (!metrics) {
+      metrics = scheduleMetrics(
+        Array.from(
+          new Set<string>(combination.scheduledCrns ?? combination.crns)
+        ).flatMap((crn) => {
+          const section = this.findSection(crn);
+          return section ? [section] : [];
+        })
+      );
+      this.metricCache.set(combination, metrics);
+    }
+    return metrics;
+  }
 
   constructor(
     data: OscarConstructionDate,
@@ -255,24 +273,21 @@ export default class Oscar {
         return -avg;
       }),
       new SortingOption('Least Travel Time', (combination) => {
-        let total = 0;
-        for (let c = 0; c < combination.crns.length - 1; c++) {
-          const crnA = combination.crns[c];
-          const crnB = combination.crns[c + 1];
-
-          if (crnA && crnB) {
-            const sectionA = this.findSection(crnA);
-            const sectionB = this.findSection(crnB);
-
-            if (sectionA && sectionB) {
-              const locA = sectionA.meetings[0]?.location ?? null;
-              const locB = sectionB.meetings[0]?.location ?? null;
-
-              total += getTravel(locA, locB);
-            }
-          }
-        }
-        return total;
+        const { unknownTrips, walkingSeconds } = this.metrics(combination);
+        return [unknownTrips, walkingSeconds];
+      }),
+      new SortingOption(
+        'Fewest Class Days',
+        (combination) => this.metrics(combination).classDays
+      ),
+      new SortingOption(
+        'Least Idle Time',
+        (combination) => this.metrics(combination).idleMinutes
+      ),
+      new SortingOption('Efficient Week', (combination) => {
+        const { classDays, idleMinutes, unknownTrips, walkingSeconds } =
+          this.metrics(combination);
+        return [classDays, idleMinutes, unknownTrips, walkingSeconds];
       }),
     ];
   }
@@ -445,27 +460,10 @@ export default class Oscar {
           ],
         };
       }
-      // Preserve one representative per equivalent timetable, but only AFTER
-      // checking pins, exclusions, dates and every component in each bundle.
-      const seen = new Set<string>();
+      // Distinct CRNs remain distinct even when times match: locations,
+      // instructors, seats and historical GPAs can differ.
       choices.push(
-        candidates
-          .filter((bundle) => {
-            if (bundle.length > 1) return true;
-            const key = JSON.stringify(
-              bundle.flatMap((s) =>
-                s.meetings.map(({ days, period, dateRange }) => ({
-                  days,
-                  period,
-                  dateRange,
-                }))
-              )
-            );
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-          })
-          .map((bundle) => bundle.filter((s) => !pinned.has(s.crn)))
+        candidates.map((bundle) => bundle.filter((s) => !pinned.has(s.crn)))
       );
     }
 
@@ -515,6 +513,7 @@ export default class Oscar {
       );
       return {
         crns,
+        scheduledCrns: [...Array.from(pinned), ...crns],
         startMap,
         endMap,
       };
@@ -544,7 +543,15 @@ export default class Oscar {
         ...combination,
         factor: sortingOption.calculateFactor(combination, events),
       }))
-      .sort((a, b) => a.factor - b.factor);
+      .sort((a, b) => {
+        const left = Array.isArray(a.factor) ? a.factor : [a.factor];
+        const right = Array.isArray(b.factor) ? b.factor : [b.factor];
+        for (let i = 0; i < left.length; i++) {
+          const difference = (left[i] ?? 0) - (right[i] ?? 0);
+          if (difference) return difference;
+        }
+        return 0;
+      });
   }
 
   iterateTimeBlocks(

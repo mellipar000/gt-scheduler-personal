@@ -22,7 +22,7 @@ import './stylesheet.scss';
 
 export type ProfessorInfoCardProps = {
   professorName: string;
-  professorGpa: number | null;
+  professorGpa: number | null | undefined;
   course: Course;
   displaySectionInfo: boolean;
   onViewRestrictions?: (majors: string[]) => void;
@@ -182,7 +182,12 @@ export default function ProfessorInfoCard({
     return [
       {
         label: 'Course GPA',
-        value: professorGpa === null ? 'Loading...' : professorGpa.toFixed(2),
+        value:
+          professorGpa === undefined
+            ? 'Loading...'
+            : professorGpa === null
+            ? 'Unavailable'
+            : professorGpa.toFixed(2),
       },
     ];
   }, [professorGpa]);

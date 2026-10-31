@@ -23,7 +23,7 @@ To implement its goal of facilitating schedule creation and class exploration, G
 - The list of terms (strings like `202008`, which corresponds to Fall 2020) that have been scraped by the [Crawler application](https://api.github.com/repos/gt-scheduler/crawler/): https://gt-scheduler.github.io/crawler/index.json
 - The data for a single term, which is the full output of the Crawler application in a single JSON file: https://gt-scheduler.github.io/crawler/202008.json
 - Seating information for a single section, which is requested on demand and sent through our CORS proxy in the [Backend application](https://api.github.com/repos/gt-scheduler/crawler/) to [Oscar](https://oscar.gatech.edu/) (Georgia Tech's registration management system): https://gt-scheduler.azurewebsites.net/proxy/class_section?term=202008&crn=87086
-- Course/instructor GPA information, which is fetched from [Course Critique](https://critique.gatech.edu/)'s API: https://c4citk6s9k.execute-api.us-east-1.amazonaws.com/test/data/course?courseID=CS%201331
+- Course/instructor GPA information, which is fetched from [Course Critique](https://critique.gatech.edu/)'s API: https://c4citk6s9k.execute-api.us-east-1.amazonaws.com/prod/data/course?courseID=CS%201331
 
 This personal fork has no automatic deployment, analytics, or Tag Manager. Firebase and Sentry are disabled by default. No original developers' credentials are needed.
 
@@ -36,7 +36,7 @@ npx --yes yarn@1.22.22 install --frozen-lockfile
 npm start
 ```
 
-Open [localhost:3000](http://localhost:3000), select any available term, and add courses normally. Published crawler data supplies all courses and terms without manual imports. Verified bundles take priority where provided; otherwise the scheduler infers complete component combinations using schedule types, section IDs, instructors, campuses, and conflicts. A small “Registration links unverified” note identifies inferred results. Confirm those links in OSCAR before registration.
+Open [localhost:3000](http://localhost:3000), select any available term, and add courses normally. Published crawler data supplies all courses and terms without manual imports. Verified bundles take priority where provided; otherwise the scheduler infers complete component combinations using schedule types, section IDs, campuses, and conflicts. A small “Registration links unverified” note identifies inferred results. Confirm those links in OSCAR before registration.
 
 The optional `npm run data:fetch -- 202608 "AE 2610"` importer remains available for debugging verified relationships. To use its local snapshot explicitly, set `REACT_APP_LOCAL_CRAWLER_URL=/course-data` in `.env.local`. Normal scheduling does not require this step.
 
@@ -68,3 +68,5 @@ The project uses pre-commit hooks using [Husky](https://typicode.github.io/husky
 The GT Scheduler project welcomes (and encourages) contributions from the community. Regular development is performed by the project owners (Jason Park and [Bits of Good](https://bitsofgood.org/)), but we still encourage others to work on adding new features or fixing existing bugs and make the registration process better for the Georgia Tech community.
 
 More information on how to contribute can be found [in the contributing guide](/CONTRIBUTING.md).
+
+See [schedule optimization and GPA notes](SCHEDULE_OPTIMIZATION.md) for ranking semantics, source investigation, benchmarks, and manual QA.
