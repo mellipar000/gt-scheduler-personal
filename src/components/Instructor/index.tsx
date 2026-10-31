@@ -10,6 +10,7 @@ import { classes, simplifyName, unique } from '../../utils/misc';
 import { Section as SectionBean } from '../../data/beans';
 import { ActionRow, Section } from '..';
 import { ScheduleContext } from '../../contexts';
+import professorSearchUrl from '../../utils/professorSearch';
 
 import './stylesheet.scss';
 
@@ -64,6 +65,7 @@ export default function Instructor({
   );
 
   const excludeTooltipId = useId();
+  const rmpUrl = professorSearchUrl(name);
   return (
     <div
       className={classes(
@@ -79,13 +81,11 @@ export default function Instructor({
             icon: expanded ? faAngleUp : faAngleDown,
             onClick: (): void => setExpanded(!expanded),
           },
-          !['TBA', 'Not Assigned'].includes(name)
+          rmpUrl
             ? {
                 icon: faGraduationCap,
-                tooltip: 'View Instructor Ratings',
-                href: `http://www.ratemyprofessors.com/search/professors/361?q=${encodeURIComponent(
-                  simplifyName(name)
-                )}`,
+                tooltip: 'Search Rate My Professors at Georgia Tech',
+                href: rmpUrl,
                 id: `${simplifyName(name, '-').toLowerCase()}-rmp`,
               }
             : null,
@@ -99,7 +99,7 @@ export default function Instructor({
         style={instructorPinned ? { backgroundColor: color } : undefined}
       >
         <div className="instructor-row">
-          <span className="gpa">Instructor GPA: {gpa || 'N/A'}</span>
+          <span className="gpa">Course Critique GPA: {gpa || 'N/A'}</span>
         </div>
       </ActionRow>
       {expanded && (

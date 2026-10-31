@@ -18,6 +18,7 @@ import { CourseGpa, CrawlerPrerequisites } from '../../types';
 import { ErrorWithFields, softError } from '../../log';
 import Modal from '../Modal';
 import CourseInfo from '../CourseInfo';
+import { courseCredits, formatCredits } from '../../utils/credits';
 
 import './stylesheet.scss';
 
@@ -157,9 +158,12 @@ export default function Course({
   const pinnedSections = course.sections.filter((section) =>
     pinnedCrns.includes(section.crn)
   );
-  const totalCredits = pinnedSections.reduce(
-    (credits, section) => credits + section.credits,
-    0
+  const creditText = formatCredits(
+    courseCredits(
+      course,
+      isSearching ? [] : pinnedCrns,
+      isSearching ? [] : excludedCrns
+    )
   );
   return (
     <div
@@ -215,16 +219,24 @@ export default function Course({
         {!isSearching && (
           <div className="course-row">
             <span className="gpa">
-              Course GPA:{' '}
+              Course Critique GPA:{' '}
               {gpaMap === null
                 ? 'Loading...'
                 : gpaMap.averageGpa !== undefined
                 ? gpaMap.averageGpa.toFixed(2)
                 : 'Unavailable'}
             </span>
-            {totalCredits > 0 && (
-              <span className="credits">{totalCredits} Credits</span>
-            )}
+            <span
+              className="credits"
+              title="Crawler estimate; verify variable credits in OSCAR"
+            >
+              {creditText} Credits
+            </span>
+          </div>
+        )}
+        {isSearching && (
+          <div className="course-row">
+            <span className="credits">{creditText} Credits</span>
           </div>
         )}
         {paletteShown && (

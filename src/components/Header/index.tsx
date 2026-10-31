@@ -5,6 +5,11 @@ import HeaderDisplay from '../HeaderDisplay';
 import useHeaderActionBarProps from '../../hooks/useHeaderActionBarProps';
 import { Palette, Term } from '../../types';
 import { DEFAULT_PALETTE, SOFT_PALETTE, DEEP_PALETTE } from '../../constants';
+import {
+  courseCredits,
+  totalCourseCredits,
+  formatCredits,
+} from '../../utils/credits';
 
 import './stylesheet.scss';
 
@@ -57,6 +62,8 @@ export default function Header({
       term,
       oscar,
       pinnedCrns,
+      desiredCourses,
+      excludedCrns,
       allVersionNames,
       currentVersion,
       palette,
@@ -74,12 +81,17 @@ export default function Header({
   ] = useContext(ScheduleContext);
   const terms = useContext(TermsContext);
 
-  const totalCredits = useMemo(() => {
-    return pinnedCrns.reduce((credits, crn) => {
-      const crnSection = oscar.findSection(crn);
-      return credits + (crnSection != null ? crnSection.credits : 0);
-    }, 0);
-  }, [pinnedCrns, oscar]);
+  const totalCredits = useMemo(
+    () =>
+      formatCredits(
+        totalCourseCredits(
+          desiredCourses.map((id) =>
+            courseCredits(oscar.findCourse(id), pinnedCrns, excludedCrns)
+          )
+        )
+      ),
+    [desiredCourses, pinnedCrns, excludedCrns, oscar]
+  );
 
   const headerActionBarProps = useHeaderActionBarProps(captureRef);
 
