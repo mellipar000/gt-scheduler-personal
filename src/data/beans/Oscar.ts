@@ -369,7 +369,8 @@ export default class Oscar {
     desiredCourses: readonly string[],
     pinnedCrns: readonly string[],
     excludedCrns: readonly string[],
-    events: Immutable<Event[]>
+    events: Immutable<Event[]>,
+    limits?: { maxCombinations: number; maxNodes: number }
   ): CombinationResult {
     const diagnostics: string[] = [];
     const fail = (message: string): CombinationResult => ({
@@ -505,8 +506,18 @@ export default class Oscar {
       }
       return value;
     };
+    let nodes = 0;
     const dfs = (courseIndex: number, selected: Section[]): void => {
+      nodes += 1;
+      if (limits && nodes > limits.maxNodes)
+        throw new Error(
+          'Search node limit reached. Narrow courses, pins or exclusions.'
+        );
       if (courseIndex === choices.length) {
+        if (limits && crnsList.length >= limits.maxCombinations)
+          throw new Error(
+            'Search combination limit reached. Narrow courses, pins or exclusions.'
+          );
         crnsList.push(selected.map((s) => s.crn));
         return;
       }

@@ -86,8 +86,10 @@
     "lint:fix": "eslint \"**/*.{js,jsx,ts,tsx}\" --fix",
     "format": "prettier \"**/*.{js,jsx,ts,tsx,json}\" --write",
     "format:check": "prettier \"**/*.{js,jsx,ts,tsx,json}\" -l",
-    "test:benchmark": "cross-env CI=true SCHEDULER_BENCHMARK=1 react-scripts test --watchAll=false --runInBand --testPathPattern=Oscar.test --testNamePattern=benchmark",
-    "data:fetch": "node scripts/fetch-course-data.cjs"
+    "test:benchmark": "cross-env CI=true SCHEDULER_BENCHMARK=1 react-scripts test --watchAll=false --runInBand --cacheDirectory=.local-data/jest-cache --testPathPattern=Oscar.test --testNamePattern=benchmark",
+    "data:fetch": "node scripts/fetch-course-data.cjs",
+    "scheduler": "node scripts/scheduler.cjs",
+    "test:harness": "cross-env CI=true react-scripts test --watchAll=false --runInBand --cacheDirectory=.local-data/jest-cache --testPathPattern=\"harness|ScheduleTransfer|useVersionActions\""
   },
   "eslintConfig": {
     "extends": "react-app"

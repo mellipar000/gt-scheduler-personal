@@ -433,6 +433,7 @@ function ContextProvider({
 
   // Get all version-related actions
   const {
+    importVersion,
     addNewVersion,
     deleteVersion,
     renameVersion,
@@ -495,6 +496,7 @@ function ContextProvider({
         patchSchedule,
         updateSchedule,
         setCurrentVersion: setVersion,
+        importVersion,
         addNewVersion,
         deleteVersion,
         deleteFriendRecord,
@@ -515,6 +517,7 @@ function ContextProvider({
       patchSchedule,
       updateSchedule,
       setVersion,
+      importVersion,
       addNewVersion,
       deleteFriendRecord,
       deleteVersion,
