@@ -358,7 +358,7 @@ type ContextProviderProps = {
  * Additionally, this function memoizes the context values
  * as well as any derived values that go into them.
  */
-function ContextProvider({
+export function ContextProvider({
   terms,
   currentTerm,
   setTerm,

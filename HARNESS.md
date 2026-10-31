@@ -9,17 +9,32 @@ node scripts/scheduler.cjs --request .local-data/request.json
 
 The CLI consumes one strict JSON request and emits one compact JSON response:
 `{"ok":true,"result":...}`. Errors return `ok:false` and exit code 1.
-Logs go to stderr. No browser, credentials, cloud writes, or network calls are
-used. The launcher transpiles application TypeScript in memory using the
+Logs go to stderr. No browser, credentials, or cloud writes are used. The
+launcher transpiles application TypeScript in memory using the
 existing TypeScript dependency. It calls Oscar's crawler decoder, registration
 bundle generator, conflict checks, sorting options, and schedule metrics.
 
 All paths are relative to the current working directory. `term` is required
-for every operation. Except `read`, operations require `dataFile`, a crawler
-JSON snapshot for that term. The crawler format itself has no term identifier;
-the caller must pair the correct snapshot with its term. Obtain snapshots
-separately through the existing `data:fetch` importer or save published crawler
-JSON. The harness deliberately does not fetch data or live seat/GPA information.
+for every operation. Except `read`, operations automatically use a per-term
+cache under `.local-data/crawler/`, refreshing the published crawler JSON when
+missing or at least 60 minutes old. Downloads are validated before atomic
+replacement. If refresh fails, the last valid snapshot is used with a warning
+on stderr; without one, the request fails. An explicit `dataFile` bypasses the
+cache and refresh, which is useful for tests and verified local snapshots. The
+crawler format has no term identifier, so pair explicit files with the correct
+term. Live seat and GPA information is not fetched.
+
+## Screenshot-first searches
+
+Codex can interpret a screenshot directly: identify its semester, visible
+courses, section details and schedule preferences; state which details are
+uncertain. Use `courses` and `sections` to resolve actual IDs and CRNs, then
+translate confirmed mandatory restrictions into `hard` and preferences into
+`soft`. Search and rank with the CLI, returning the five best candidates with
+brief explanations. Ask only when an ambiguity prevents a valid search; do
+not invent missing CRNs or constraints. No OCR, image-processing pipeline or
+browser automation is needed. An exported schedule is optional, and useful
+when exact existing state must be preserved or a candidate transferred back.
 
 ## Requests
 

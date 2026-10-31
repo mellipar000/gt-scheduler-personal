@@ -56,18 +56,9 @@ if (!process.env.GT_SCHEDULER_CHILD) {
     filename.startsWith(`${source}${path.sep}`)
       ? compile(module, filename)
       : originalJs(module, filename);
-  // The CLI does not call network-dependent engine methods. Block accidental I/O.
-  for (const name of ['node:http', 'node:https']) {
-    const transport = require(name);
-    transport.request = transport.get = () => {
-      throw new Error('Network disabled in local harness');
-    };
-  }
-  global.fetch = () =>
-    Promise.reject(new Error('Network disabled in local harness'));
   console.log =
     console.warn =
     console.error =
       (...args) => process.stderr.write(`${args.join(' ')}\n`);
-  require('../src/harness/cli').main();
+  void require('../src/harness/cli').main();
 }

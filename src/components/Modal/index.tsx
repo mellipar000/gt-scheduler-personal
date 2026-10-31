@@ -40,6 +40,7 @@ export type ModalProps = {
   checkbox?: boolean;
   setCheckbox?: (checkbox: boolean) => void;
   checkboxContent?: string;
+  animate?: boolean;
 };
 
 type TransitionProps = {
@@ -70,6 +71,7 @@ export default function Modal({
   checkbox,
   setCheckbox,
   checkboxContent,
+  animate = true,
 }: ModalProps): React.ReactElement {
   // Empty fragment is used to provide a non-nil default value.
   // This lets an undefined children prop represent a different state
@@ -97,8 +99,8 @@ export default function Modal({
       renderBackdrop={(props): React.ReactElement => (
         <div {...props} className="modal-backdrop" />
       )}
-      transition={FadeZoom}
-      backdropTransition={Fade}
+      transition={animate ? FadeZoom : undefined}
+      backdropTransition={animate ? Fade : undefined}
     >
       <div
         className={classes('modal', className, mobile && 'mobile')}

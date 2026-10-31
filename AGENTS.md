@@ -4,9 +4,15 @@ Use `node scripts/scheduler.cjs --request request.json` or pipe one JSON request
 to stdin. Read [HARNESS.md](HARNESS.md) for the contract and examples. Do not use
 browser/computer-use automation for scheduling.
 
-- Start with `courses` / `sections` and a local crawler snapshot. Use `read` to
-  inspect the user's exported version before searching. Keep private snapshots
-  and exports under ignored `.local-data/`; never commit them.
+- Screenshots are primary scheduling inputs: identify the semester, visible
+  courses, section details and preferences, distinguishing confirmed details
+  from uncertain interpretations. Resolve IDs using `courses` / `sections`
+  against the CLI's per-term crawler snapshot. Ask only when necessary; never
+  invent CRNs or constraints. Search directly and explain the five best valid
+  candidates. Do not build OCR or screenshot-processing infrastructure.
+- JSON import/export is optional for exact state preservation and transfer to
+  the website. When an export is supplied, use `read` before searching. Keep
+  private snapshots and exports under ignored `.local-data/`; never commit them.
 - Translate mandatory requests into `hard`; translate preferences into `soft`.
   Clarify actual ambiguity, especially hard versus preferred restrictions.
   Days use `MTWRFSU`; times are integer minutes after midnight. Lab preferences

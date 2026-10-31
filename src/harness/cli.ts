@@ -113,13 +113,7 @@ function describe(s: Section): Record<string, unknown> {
   };
 }
 
-export function run(value: unknown): unknown {
-  const r = requestSchema.parse(value);
-  if (r.op === 'read') {
-    required(r.scheduleFile, 'scheduleFile');
-    return { schedule: readSchedule(r) };
-  }
-  const raw = readJson(required(r.dataFile, 'dataFile'));
+function decodeSnapshot(raw: unknown, term: string): Oscar {
   // Oscar is the canonical crawler decoder. Reject malformed top-level inputs,
   // and surface its per-course decoding diagnostics on stderr.
   z.object({
@@ -136,7 +130,87 @@ export function run(value: unknown): unknown {
     updatedAt: z.string().datetime(),
     version: z.number().int(),
   }).parse(raw);
-  const oscar = new Oscar(raw as CrawlerTermData, r.term);
+  const oscar = new Oscar(raw as CrawlerTermData, term);
+  if (
+    !Object.keys((raw as CrawlerTermData).courses).length ||
+    oscar.courses.length !==
+      Object.keys((raw as CrawlerTermData).courses).length
+  )
+    throw new Error('Crawler snapshot has missing or invalid courses');
+  return oscar;
+}
+
+export async function snapshotFile(term: string): Promise<string> {
+  const directory = path.resolve('.local-data', 'crawler');
+  const filename = path.join(directory, `${term}.json`);
+  let valid = false;
+  try {
+    decodeSnapshot(readJson(filename), term);
+    valid = true;
+    if (Date.now() - fs.statSync(filename).mtimeMs < 60 * 60 * 1000)
+      return filename;
+  } catch {
+    // Fetch a replacement for an absent or invalid cache.
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30000);
+  try {
+    const response = await fetch(
+      `https://gt-scheduler.github.io/crawler-v2/${term}.json`,
+      {
+        signal: controller.signal,
+      }
+    );
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    if (!response.body) throw new Error('Empty crawler response');
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    for (;;) {
+      const part = await reader.read();
+      if (part.done) break;
+      size += part.value.byteLength;
+      if (size > 50 * 1024 * 1024) {
+        await reader.cancel();
+        throw new Error('Snapshot exceeds 50 MiB');
+      }
+      chunks.push(part.value);
+    }
+    const content = Buffer.concat(chunks).toString('utf8');
+    decodeSnapshot(JSON.parse(content) as unknown, term);
+    fs.mkdirSync(directory, { recursive: true });
+    const temporary = path.join(directory, `.${term}.${randomUUID()}.tmp`);
+    try {
+      fs.writeFileSync(temporary, content, { flag: 'wx' });
+      fs.renameSync(temporary, filename);
+    } finally {
+      if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
+    }
+    return filename;
+  } catch (error) {
+    if (!valid)
+      throw new Error(`Unable to refresh crawler snapshot: ${String(error)}`);
+    process.stderr.write(
+      `Warning: crawler refresh failed; using stale snapshot for ${term}: ${String(
+        error
+      )}\n`
+    );
+    return filename;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export function run(value: unknown): unknown {
+  const r = requestSchema.parse(value);
+  if (r.op === 'read') {
+    required(r.scheduleFile, 'scheduleFile');
+    return { schedule: readSchedule(r) };
+  }
+  const oscar = decodeSnapshot(
+    readJson(required(r.dataFile, 'dataFile')),
+    r.term
+  );
   const page = <T>(items: T[]): unknown => ({
     total: items.length,
     offset: r.offset,
@@ -344,7 +418,7 @@ function writeOutput(
   }
 }
 
-export function main(): void {
+export async function main(): Promise<void> {
   try {
     const args = process.argv.slice(2);
     const options: Record<string, string | boolean> = {};
@@ -375,6 +449,8 @@ export function main(): void {
       path.resolve(output) === path.resolve(parsed.storeFile)
         ? fs.readFileSync(parsed.storeFile, 'utf8')
         : undefined;
+    if (parsed.op !== 'read' && !parsed.dataFile)
+      parsed.dataFile = await snapshotFile(parsed.term);
     const result = run(parsed);
     const summary =
       parsed.op === 'import'
