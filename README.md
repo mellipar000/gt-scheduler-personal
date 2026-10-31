@@ -33,14 +33,12 @@ Use Node.js 22 LTS and Yarn Classic 1.22.22 (also tested with Node.js 24.18.1).
 
 ```powershell
 npx --yes yarn@1.22.22 install --frozen-lockfile
-npm run data:fetch -- 202608 "AE 2610" "CS 1331"
-Copy-Item .env.example .env.local
 npm start
 ```
 
-Open [localhost:3000](http://localhost:3000), select Fall 2026, and add AE 2610. Each recommendation includes its breakout and one verified lab. Add other course IDs to `data:fetch` to verify their registration options. The importer downloads public crawler data and checks OSCAR's public Linked Sections endpoint; it never registers for classes.
+Open [localhost:3000](http://localhost:3000), select any available term, and add courses normally. Published crawler data supplies all courses and terms without manual imports. Verified bundles take priority where provided; otherwise the scheduler infers complete component combinations using schedule types, section IDs, instructors, campuses, and conflicts. A small “Registration links unverified” note identifies inferred results. Confirm those links in OSCAR before registration.
 
-**The published crawler omits authoritative registration links. Courses without verified registration requirements return zero recommendations with a diagnostic.** Import every requested course and term. Section letters and instructors alone do not establish valid links. On a fetch/parse failure the importer exits nonzero and leaves that course unverified. Downloaded `public/course-data/` snapshots are ignored by Git and need periodic refresh.
+The optional `npm run data:fetch -- 202608 "AE 2610"` importer remains available for debugging verified relationships. To use its local snapshot explicitly, set `REACT_APP_LOCAL_CRAWLER_URL=/course-data` in `.env.local`. Normal scheduling does not require this step.
 
 Core scheduling needs no accounts, maps, ratings, or private secrets. Cloud features require your own services and explicit configuration; upstream Firebase project IDs are blocked. See [.env.example](.env.example).
 

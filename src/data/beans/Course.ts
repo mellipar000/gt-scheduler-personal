@@ -2,6 +2,7 @@ import axios from 'axios';
 import { decode } from 'html-entities';
 
 import Section from './Section';
+import inferRegistrationBundles from './inferRegistrationBundles';
 import Oscar from './Oscar';
 import {
   CourseGpa,
@@ -80,6 +81,10 @@ export default class Course {
   registrationBundles: Section[][] = [];
 
   registrationIssue?: string;
+
+  registrationInferred = false;
+
+  private inferenceLoaded = false;
 
   onlyLectures: Section[] | undefined;
 
@@ -178,8 +183,7 @@ export default class Course {
       typeof registration.source !== 'string' ||
       !registration.source.trim()
     ) {
-      this.registrationIssue =
-        'Verified registration requirements are unavailable. Refresh linked-section data from OSCAR; section names and instructors cannot establish valid links.';
+      this.registrationInferred = true;
     } else if (
       !Array.isArray(registration.bundles) ||
       registration.bundles.some(
@@ -224,6 +228,17 @@ export default class Course {
             );
           }
         }
+      }
+    }
+  }
+
+  prepareRegistrationBundles(): void {
+    if (this.registrationInferred && !this.inferenceLoaded) {
+      this.inferenceLoaded = true;
+      this.registrationBundles = inferRegistrationBundles(this.sections);
+      if (!this.registrationBundles.length) {
+        this.registrationIssue =
+          'No complete combination of the available component types could be inferred from section links and meeting times.';
       }
     }
   }

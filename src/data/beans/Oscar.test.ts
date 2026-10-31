@@ -188,17 +188,18 @@ describe('AE 2610, captured Fall 2026 crawler data and OSCAR links', () => {
       end: 1045,
     });
   });
-  it('refuses lecture-only or lab-only recommendations from unverified published data', () => {
+  it('infers complete breakout and lab pairs from published data', () => {
     const result = new Oscar(rawAE(), '202608').getCombinationResult(
       ['AE 2610'],
       [],
       [],
       []
     );
-    expect(result.combinations).toEqual([]);
-    expect(result.diagnostics.join()).toMatch(
-      /Verified registration requirements/
-    );
+    expect(result.combinations).toHaveLength(11);
+    result.combinations.forEach((c) => {
+      expect(c.crns).toContain('86554');
+      expect(c.crns).toHaveLength(2);
+    });
   });
   it('returns all 11 verified lab choices, each with the mandatory breakout, for every sort', () => {
     const oscar = verifiedAE();
@@ -290,17 +291,93 @@ describe('complete registration generation', () => {
       )
     ).toEqual([]);
   });
-  it('never invents links from names or instructors', () => {
+  it('infers complete links when verification is absent', () => {
     const c = linked();
     c[5] = undefined;
-    expect(
-      new Oscar(makeData({ 'TEST 1000': c }), '202608').getCombinations(
-        ['TEST 1000'],
-        [],
-        [],
+    const oscar = new Oscar(makeData({ 'TEST 1000': c }), '202608');
+    expect(oscar.findCourse('TEST 1000')?.registrationInferred).toBe(true);
+    expect(oscar.getCombinations(['TEST 1000'], [], [], [])).toHaveLength(2);
+    assertValid(oscar, ['TEST 1000']);
+  });
+  it.each(['202502', '202608', '202702'])(
+    'schedules ordinary unverified lectures in term %s',
+    (term) => {
+      const c = makeCourse(
+        { A: section('10001'), B: section('10002', 0, 2) },
         []
-      )
+      );
+      c[5] = undefined;
+      const oscar = new Oscar(makeData({ 'TEST 1000': c }), term);
+      expect(oscar.getCombinations(['TEST 1000'], [], [], [])).toHaveLength(2);
+      assertValid(oscar, ['TEST 1000'], ['10001']);
+      assertValid(oscar, ['TEST 1000'], [], ['10001']);
+    }
+  );
+  it('requires lecture, studio, and discussion roles without verification', () => {
+    const c = makeCourse(
+      {
+        A: section('10001'),
+        A1: section('10002', 1, 1),
+        A2: section('10003', 2, 2, 'T'),
+      },
+      []
+    );
+    c[5] = undefined;
+    const d = makeData({ 'TEST 1000': c });
+    d.caches.scheduleTypes = ['Lecture*', 'Studio*', 'Discussion*'];
+    const oscar = new Oscar(d, '202702');
+    expect(
+      oscar.getCombinations(['TEST 1000'], [], [], [])[0]?.crns
+    ).toHaveLength(3);
+    assertValid(oscar, ['TEST 1000']);
+    expect(oscar.getCombinations(['TEST 1000'], [], ['10002'], [])).toEqual([]);
+  });
+  it('uses ID evidence ahead of instructors and refuses incomplete inferred pairs', () => {
+    const c = makeCourse(
+      {
+        A: section('10001'),
+        B: section('10002', 0, 2),
+        B1: section('10003', 1, 1),
+      },
+      []
+    );
+    c[5] = undefined;
+    const oscar = new Oscar(makeData({ 'TEST 1000': c }), '202608');
+    expect(
+      oscar.getCombinations(['TEST 1000'], ['10002'], [], [])[0]?.crns
+    ).toEqual(['10003']);
+    expect(
+      oscar.getCombinations(['TEST 1000'], ['10002'], ['10003'], [])
     ).toEqual([]);
+  });
+  it('falls back from explicitly unknown metadata and prefers verified alternatives', () => {
+    const c = linked();
+    c[5] = { status: 'unknown', source, bundles: [] };
+    const oscar = new Oscar(makeData({ 'TEST 1000': c }), '202502');
+    expect(oscar.getCombinations(['TEST 1000'], [], [], [])).toHaveLength(2);
+    c[5] = { status: 'complete', source, bundles: [['10001', '10003']] };
+    const verified = new Oscar(makeData({ 'TEST 1000': c }), '202502');
+    expect(verified.findCourse('TEST 1000')?.registrationInferred).toBe(false);
+    expect(verified.getCombinations(['TEST 1000'], [], [], [])).toHaveLength(1);
+  });
+  it('preserves combined CRNs and reports impossible inferred schedules', () => {
+    const c = makeCourse({ A: section('10001', 2) }, []);
+    c[5] = undefined;
+    const oscar = new Oscar(makeData({ 'TEST 1000': c }), '202608');
+    expect(oscar.getCombinations(['TEST 1000'], [], [], [])[0]?.crns).toEqual([
+      '10001',
+    ]);
+    const conflict = linked();
+    conflict[5] = undefined;
+    Object.values(conflict[1]).forEach((s) => {
+      (s[1][0] as CrawlerMeeting)[0] = 0;
+    });
+    const result = new Oscar(
+      makeData({ 'TEST 1000': conflict }),
+      '202608'
+    ).getCombinationResult(['TEST 1000'], [], [], []);
+    expect(result.combinations).toEqual([]);
+    expect(result.diagnostics.join()).toMatch(/No complete combination/);
   });
   it('checks conflicts within a linked bundle, including when both CRNs are pinned', () => {
     const c = makeCourse({ A: section('10001'), A1: section('10002', 1, 3) }, [

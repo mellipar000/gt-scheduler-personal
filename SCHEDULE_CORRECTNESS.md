@@ -15,7 +15,7 @@ Other defects: the fallback silently skipped courses; links were guessed using p
 
 ## Fix and crawler contract
 
-Generation uses complete registration bundles. A bundle can have one CRN with multiple meetings, two linked CRNs, or three or more mandatory components. It must contain all course pins and satisfy exclusions, internal and external time conflicts, and recurring events. Missing or invalid requirements produce zero recommendations with a diagnostic. Invalid meeting alternatives are rejected with a diagnostic; independently verified alternatives can still be returned. Explicit asynchronous sections can have no scheduled meetings. Weekend conflicts are included.
+Generation uses complete registration bundles. A bundle can have one CRN with multiple meetings, two linked CRNs, or three or more mandatory components. It must contain all course pins and satisfy exclusions, internal and external time conflicts, and recurring events. Absent verification triggers inference; missing sections, invalid verified requirements, or impossible component combinations produce a diagnostic. Invalid meeting alternatives are rejected with a diagnostic; independently verified alternatives can still be returned. Explicit asynchronous sections can have no scheduled meetings. Weekend conflicts are included.
 
 `getCombinations()` keeps its array API. `getCombinationResult()` adds diagnostics displayed in the recommendations panel. As before, `combination.crns` contains additions to pinned CRNs; the full schedule is their union. Sorting functions remain unchanged. Single-section timetable grouping happens after validation; distinct linked CRN choices remain available. Course alternatives and pairwise conflicts are cached per search.
 
@@ -29,7 +29,7 @@ Optional sixth element of `CrawlerCourse`:
 }
 ```
 
-The example is abbreviated. Each bundle includes the queried section AND all required companions. `complete` means the whole course's registration alternatives were successfully verified. An explicit no-links response establishes a singleton. Failures use `unknown` or omit metadata; they must never become singleton options. All CRNs must exist in that course's term data. Empty complete bundles mean no registration options. Old feeds remain browsable but cannot establish valid recommendations, including for apparently lecture-only courses.
+The example is abbreviated. Each bundle includes the queried section AND all required companions. `complete` means the whole course's registration alternatives were successfully verified. An explicit no-links response establishes a singleton. Failures use `unknown` or omit metadata; they must never become singleton options. All CRNs must exist in that course's term data. Empty complete bundles mean no registration options. Old feeds remain fully usable through inferred component bundles.
 
 The local adapter `scripts/fetch-course-data.cjs` queries every section of explicitly requested courses, parses whole option groups, and requires each member to confirm the same full bundle. It rejects login/error/empty/unrecognized responses, malformed rows, missing/cross-course CRNs, and inconsistent reciprocal links. Course failures leave unknown status and exit nonzero. Cross-course registration links require an explicit future dependency model; the adapter safely refuses them.
 
@@ -53,7 +53,15 @@ Local setup removes upstream CNAME and analytics/GTM, uses relative build paths,
 
 - Original-code reproduction: 12 incomplete singletons; the breakout alone ranked first.
 - Live importer: AE 2610 has 11 verified reciprocal bundles; CS 1331 has 10 verified singleton bundles.
-- Automated suite: 77 tests across 10 suites passed. TypeScript, ESLint, and repository-wide formatting passed. Prettier now preserves existing line endings, matching the ESLint configuration on Windows.
+- Automated suite: 84 tests across 10 suites passed. TypeScript, ESLint, and repository-wide formatting passed. Prettier now preserves existing line endings, matching the ESLint configuration on Windows.
 - Production build succeeded with 29 existing dependency source-map warnings and a large-bundle advisory. No private credentials were supplied.
 - Browser check on the host development server: Fall 2026 loaded; adding AE 2610 displayed 11 choices; selecting the first pinned CRNs 86554 and 84090 and rendered both the Wednesday 12:30-13:20 breakout and Monday 15:30-17:25 lab.
 - The initial sandbox server was unreachable from the host browser; an explicit host loopback server at 127.0.0.1:3001 completed the check. Initial Jest temporary-cache permission failures were resolved using the workspace cache.
+
+## Usability correction
+
+Published crawler data is again the default for every available course and term. No importer or environment file is needed. Verified bundles override inference. Without verification, schedule types define component roles (lecture, breakout, laboratory, studio, recitation/discussion/tutorial, common exam, and other normalized types). A combined section covers its roles with one CRN and retains all meetings. The generator selects one alternative per required role, preferring section-prefix relationships, then shared instructors, then conflict-free same-campus choices. These are heuristics, not registration guarantees; a subtle unverified-links note tells users to confirm in OSCAR. Pins, exclusions, all meeting checks, and sorting still apply to complete bundles.
+
+Automatic verification feasibility: the public OSCAR endpoint rejected an OPTIONS request from localhost with “Invalid CORS request”. Direct browser fetching and caching cannot reliably work without a proxy or crawler change. This milestone therefore keeps verified enrichment optional rather than adding a backend. A future crawler update can publish the existing optional bundle field; existing term-download caching will then carry that metadata automatically. No manual import is required for ordinary scheduling.
+
+Usability follow-up validation: automated checks only; no GUI automation. Regression cases include normal lecture-only courses across 202502, 202608, and 202702, absent/unknown verification, verified precedence, inferred multi-component bundles, and inferred AE 2610.

@@ -404,6 +404,7 @@ export default class Oscar {
         return fail(
           `${courseId}: Course data is missing or could not be read.`
         );
+      course.prepareRegistrationBundles();
       if (course.registrationIssue)
         return fail(`${courseId}: ${course.registrationIssue}`);
       const requiredPins = pinnedSections.filter((s) => s.course === course);

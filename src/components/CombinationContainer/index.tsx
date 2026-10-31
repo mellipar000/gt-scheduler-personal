@@ -86,6 +86,16 @@ export default function CombinationContainer({
             >
               Reset Sections
             </Button>
+            {desiredCourses.some(
+              (id) => oscar.findCourse(id)?.registrationInferred
+            ) && (
+              <small
+                className="generation-diagnostics"
+                title="Registration links are inferred from crawler section data. Confirm linked sections in OSCAR before registration."
+              >
+                Registration links unverified
+              </small>
+            )}
             {diagnostics.length > 0 && (
               <div role="status" className="generation-diagnostics">
                 {diagnostics.map((message) => (
