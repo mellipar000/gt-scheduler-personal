@@ -1,4 +1,10 @@
-import React, { useCallback, useContext, useMemo, useState } from 'react';
+import React, {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import {
   AutoSizer as _AutoSizer,
   AutoSizerProps,
@@ -35,12 +41,15 @@ export default function CombinationContainer({
       excludedCrns,
       events,
       sortingOptionIndex,
+      term,
+      currentVersion,
     },
     { patchSchedule },
   ] = useContext(ScheduleContext);
   const [, setOverlayCrns] = useContext(OverlayCrnsContext);
 
   const [confirmReset, setConfirmReset] = useState(false);
+  useEffect(() => setConfirmReset(false), [term, currentVersion]);
   const handleResetPinnedCrns = useCallback(() => {
     setConfirmReset(true);
   }, []);
@@ -169,6 +178,7 @@ export default function CombinationContainer({
             label: 'Reset',
             onClick: (): void => {
               setConfirmReset(false);
+              setOverlayCrns([]);
               patchSchedule({
                 pinnedCrns: [],
               });
@@ -177,8 +187,12 @@ export default function CombinationContainer({
         ]}
       >
         <div style={{ textAlign: 'center' }}>
-          <h2>Reset confirmation</h2>
-          <p>Are you sure you want to reset selected sections?</p>
+          <h2>Reset Sections?</h2>
+          <p>
+            Clear all pinned sections in this schedule version. Your courses,
+            recurring events, excluded sections, and sorting preference will be
+            kept.
+          </p>
         </div>
       </Modal>
     </>

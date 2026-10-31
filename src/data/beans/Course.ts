@@ -20,18 +20,14 @@ import {
   validateRatingStatsResponse,
 } from '../../utils/misc';
 import { ErrorWithFields, softError } from '../../log';
-import { CLOUD_FUNCTION_BASE_URL } from '../../constants';
 import { getTermFromSemesterName } from '../../utils/semesters';
 import { NormalizedStat, RatingStatsResponse } from '../types';
 
-// This is actually a transparent read-through cache
-// in front of the Course Critique API's course data endpoint,
-// but it should behave the same as the real API.
-// See the implementation at:
-// https://github.com/gt-scheduler/firebase-conf/blob/main/functions/src/course_critique_cache.ts
-const COURSE_CRITIQUE_API_URL = `${CLOUD_FUNCTION_BASE_URL}/getCourseDataFromCourseCritique`;
-
-const GPA_CACHE_LOCAL_STORAGE_KEY = 'course-gpa-cache-4';
+// Public read-only endpoint used by critique.gatech.edu; no Firebase proxy.
+const COURSE_CRITIQUE_API_URL =
+  'https://c4citk6s9k.execute-api.us-east-1.amazonaws.com/prod/data/course';
+const GPA_CACHE_LOCAL_STORAGE_KEY = 'course-gpa-cache-5';
+const gpaRequests = new Map<string, Promise<CourseDetailsAPIResponse | null>>();
 const GPA_CACHE_EXPIRATION_DURATION_DAYS = 7;
 
 // Cache for course-level rating statistics
@@ -347,14 +343,28 @@ export default class Course {
   private async fetchGpaInner(): Promise<CourseGpa | null> {
     // We have to clean up the course ID before sending it to the API,
     // since courses like CHEM 1212K should become CHEM 1212
-    if (!CLOUD_FUNCTION_BASE_URL) return null;
     const id = `${this.subject} ${this.number.replace(/\D/g, '')}`;
     const encodedCourse = encodeURIComponent(id);
     const url = `${COURSE_CRITIQUE_API_URL}?courseID=${encodedCourse}`;
 
     let responseData: CourseDetailsAPIResponse;
     try {
-      responseData = (await axios.get<CourseDetailsAPIResponse>(url)).data;
+      let request = gpaRequests.get(id);
+      if (!request) {
+        request = axios
+          .get<CourseDetailsAPIResponse>(url, { timeout: 10000 })
+          .then((response) => response.data)
+          .catch(() => null)
+          .then((data) => {
+            // Briefly retain failures too, avoiding repeated card requests.
+            window.setTimeout(() => gpaRequests.delete(id), 60000);
+            return data;
+          });
+        gpaRequests.set(id, request);
+      }
+      const data = await request;
+      if (data === null) return null;
+      responseData = data;
     } catch (err) {
       // Ignore network errors
       if (!isAxiosNetworkError(err)) {
@@ -638,7 +648,13 @@ export default class Course {
 
         if (typeof classSizeGroup !== 'string') return;
         if (typeof rawInstructorName !== 'string') return;
-        if (typeof gpa !== 'number') return;
+        if (
+          typeof gpa !== 'number' ||
+          !Number.isFinite(gpa) ||
+          gpa < 0 ||
+          gpa > 4
+        )
+          return;
         if (typeof historicalTerm !== 'string') return;
 
         // Map the class size group to an estimate
@@ -672,7 +688,9 @@ export default class Course {
         }
 
         // Normalize the instructor name from "LN, FN" to "FN LN"
-        let instructorName = decode(rawInstructorName);
+        let instructorName = decode(rawInstructorName)
+          .trim()
+          .replace(/\s+/g, ' ');
         const nameSegments = instructorName.split(', ');
         if (nameSegments.length === 2) {
           const [lastName, firstName] = nameSegments as [string, string];

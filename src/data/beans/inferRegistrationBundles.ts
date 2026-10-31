@@ -34,11 +34,6 @@ export default function inferRegistrationBundles(
   );
   const idMatches = (a: Section, b: Section): boolean =>
     a.id.startsWith(b.id) || b.id.startsWith(a.id);
-  const instructorMatches = (a: Section, b: Section): boolean =>
-    a.instructors.some(
-      (name) =>
-        name && !/^(tba|staff)$/i.test(name) && b.instructors.includes(name)
-    );
   const compatible = (a: Section, b: Section, role: string): boolean => {
     if (a.campus !== b.campus || hasConflictBetween(a, b)) return false;
     for (const otherRole of sectionRoles.get(a) ?? []) {
@@ -51,10 +46,8 @@ export default function inferRegistrationBundles(
       (s) => s !== a && s.campus === a.campus
     );
     // Prefer the registrar's usual section-prefix pattern. Only fall back to
-    // instructors or conflict-free choices when that evidence is unavailable.
+    // conflict-free choices when that evidence is unavailable.
     if (alternatives.some((s) => idMatches(a, s))) return idMatches(a, b);
-    if (alternatives.some((s) => instructorMatches(a, s)))
-      return instructorMatches(a, b);
     return true;
   };
   const bundles: Section[][] = [];

@@ -48,12 +48,14 @@ export default function Course({
     if (course == null) return;
     if (isSearching) return;
 
+    setGpaMap(null);
+
     // Allow the operation to be cancelled early (if the component unmounts)
     const loadOperation = new Cancellable();
     async function loadCourseGpa(): Promise<void> {
       if (course == null) return;
 
-      const promise = course.fetchGpa();
+      const promise = course.fetchGpa().catch(() => ({}));
       const result = await loadOperation.perform(promise);
       if (!result.cancelled) {
         setGpaMap(result.value);
@@ -216,9 +218,9 @@ export default function Course({
               Course GPA:{' '}
               {gpaMap === null
                 ? 'Loading...'
-                : gpaMap.averageGpa
+                : gpaMap.averageGpa !== undefined
                 ? gpaMap.averageGpa.toFixed(2)
-                : 'N/A'}
+                : 'Unavailable'}
             </span>
             {totalCredits > 0 && (
               <span className="credits">{totalCredits} Credits</span>
@@ -253,9 +255,9 @@ export default function Course({
                 gpa={
                   gpaMap === null
                     ? 'Loading...'
-                    : instructorGpa
+                    : instructorGpa !== undefined
                     ? instructorGpa.toFixed(2)
-                    : 'N/A'
+                    : 'Unavailable'
                 }
               />
             );

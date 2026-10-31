@@ -83,14 +83,20 @@ export function findGTLocationByCoords(
   );
 }
 
-export function getTravel(from: Location | null, to: Location | null): number {
-  if (!from || !to) return 0;
+export function getTravel(
+  from: Location | null,
+  to: Location | null
+): number | null {
+  if (!from || !to) return null;
+  if (![from.lat, from.long, to.lat, to.long].every(Number.isFinite))
+    return null;
+  if (from.lat === to.lat && from.long === to.long) return 0;
 
   const fromLoc = findGTLocationByCoords(from);
   const toLoc = findGTLocationByCoords(to);
-  if (!fromLoc || !toLoc) return 0;
+  if (!fromLoc || !toLoc) return null;
 
   const key = `${fromLoc.coords.lat},${fromLoc.coords.long}|${toLoc.coords.lat},${toLoc.coords.long}`;
 
-  return GT_DISTANCE_MATRIX[key] ?? 0;
+  return GT_DISTANCE_MATRIX[key] ?? null;
 }

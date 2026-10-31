@@ -71,7 +71,7 @@ export const defaultSchedule: Immutable<Schedule> = {
   excludedCrns: [],
   events: [],
   colorMap: {},
-  sortingOptionIndex: 0,
+  sortingOptionIndex: 6,
   palette: 'default' as Palette,
 };
 

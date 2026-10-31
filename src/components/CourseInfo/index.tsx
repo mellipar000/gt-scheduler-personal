@@ -7,7 +7,6 @@ import { serializePrereqs } from '../../utils/misc';
 import { CourseGpa, CrawlerPrerequisites } from '../../types';
 import MetricsCard from '../MetricsCard';
 import TabBar from '../TabBar';
-import { ErrorWithFields, softError } from '../../log';
 import { getSemesterName } from '../../utils/semesters';
 import ProfessorInfoCard from '../ProfessorInfoCard';
 import Button from '../Button';
@@ -91,27 +90,29 @@ export default function CourseInfo({
   >(null);
 
   useEffect(() => {
+    let cancelled = false;
+    setGpaMap(null);
+    setIsLoaded(false);
     if (course) {
       course
         .fetchGpa()
         .then((gpaData) => {
-          setGpaMap(gpaData);
-          setIsLoaded(true);
+          if (!cancelled) {
+            setGpaMap(gpaData);
+            setIsLoaded(true);
+          }
         })
-        .catch((err) => {
-          softError(
-            new ErrorWithFields({
-              message: 'error fetching course gpa',
-              source: err,
-              fields: {
-                courseId,
-                term: course.term,
-              },
-            })
-          );
+        .catch(() => {
+          if (!cancelled) {
+            setGpaMap({});
+            setIsLoaded(true);
+          }
         });
     }
-  }, [course, courseId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [course]);
 
   const prerequisite = useMemo(() => {
     return course?.prereqs
@@ -173,7 +174,10 @@ export default function CourseInfo({
     return [
       {
         label: 'Course GPA',
-        value: gpaMap === null ? 'Loading...' : courseGpa?.toFixed(2) ?? null,
+        value:
+          gpaMap === null
+            ? 'Loading...'
+            : courseGpa?.toFixed(2) ?? 'Unavailable',
       },
     ];
   }, [gpaMap]);
@@ -262,7 +266,11 @@ export default function CourseInfo({
                   <ProfessorInfoCard
                     key={instructorName}
                     professorName={instructorName}
-                    professorGpa={gpaMap?.[instructorName] ?? null}
+                    professorGpa={
+                      gpaMap === null
+                        ? undefined
+                        : gpaMap[instructorName] ?? null
+                    }
                     course={course}
                     displaySectionInfo={selectedTermKey === term}
                     onViewRestrictions={

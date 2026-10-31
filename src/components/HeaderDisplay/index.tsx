@@ -164,7 +164,10 @@ export default function HeaderDisplay({
         <LoadingSelect />
       )}
       {/* Version selector */}
-      <VersionSelector state={versionsState} />
+      <VersionSelector
+        key={termsState.type === 'loaded' ? termsState.currentTerm : 'loading'}
+        state={versionsState}
+      />
 
       {/* Palette selector */}
       {!mobile && (
@@ -241,7 +244,17 @@ function VersionSelector({ state }: VersionSelectorProps): React.ReactElement {
     id: string;
     name: string;
   } | null>(null);
-  const [showModal, setShowModal] = useState(false);
+  const currentVersion = state.type === 'loaded' ? state.currentVersion : null;
+  useEffect(() => setDeleteConfirm(null), [currentVersion]);
+  useEffect(() => {
+    if (
+      deleteConfirm &&
+      (state.type !== 'loaded' ||
+        !state.allVersionNames.some(({ id }) => id === deleteConfirm.id))
+    ) {
+      setDeleteConfirm(null);
+    }
+  }, [state, deleteConfirm]);
 
   if (state.type === 'loading') {
     return <LoadingSelect />;
@@ -282,19 +295,16 @@ function VersionSelector({ state }: VersionSelectorProps): React.ReactElement {
           });
 
           // Add the delete action
-          if (state.allVersionNames.length >= 2) {
-            actions.push({
-              type: 'button',
-              icon: faTrashAlt,
-              onClick: () => {
-                // Display a confirmation dialog before deleting the version
-                setDeleteConfirm(version);
-                setShowModal(true);
-              },
-              id: `${version.id}-delete`,
-              tooltip: 'Delete Schedule',
-            });
-          }
+          actions.push({
+            type: 'button',
+            icon: faTrashAlt,
+            onClick: () => {
+              // Display a confirmation dialog before deleting the version
+              setDeleteConfirm(version);
+            },
+            id: `${version.id}-delete`,
+            tooltip: 'Delete Schedule',
+          });
 
           return {
             id: version.id,
@@ -314,13 +324,13 @@ function VersionSelector({ state }: VersionSelectorProps): React.ReactElement {
       />
 
       <Modal
-        show={showModal}
+        show={deleteConfirm !== null}
         onHide={(): void => setDeleteConfirm(null)}
         buttons={[
           {
             label: 'Cancel',
             cancel: true,
-            onClick: (): void => setShowModal(false),
+            onClick: (): void => setDeleteConfirm(null),
           },
           {
             label: 'Delete',
@@ -328,7 +338,7 @@ function VersionSelector({ state }: VersionSelectorProps): React.ReactElement {
               if (deleteConfirm != null) {
                 state.deleteVersion(deleteConfirm.id);
               }
-              setShowModal(false);
+              setDeleteConfirm(null);
             },
           },
         ]}
@@ -343,6 +353,11 @@ function VersionSelector({ state }: VersionSelectorProps): React.ReactElement {
           <p>
             Are you sure you want to delete schedule &ldquo;
             {deleteConfirm?.name ?? '<unknown>'}&rdquo;?
+          </p>
+          <p>
+            This removes this version&apos;s courses, sections, and events.
+            Other schedules are kept. If this is your last schedule, an empty
+            Primary schedule will be created.
           </p>
         </div>
       </Modal>

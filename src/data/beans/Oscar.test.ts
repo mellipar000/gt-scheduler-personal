@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 import Oscar from './Oscar';
+import { FALLBACK_GT_LOCATIONS } from '../../utils/mapbox/constants';
 import fixture from './__fixtures__/ae2610-202608.json';
 import {
   CrawlerTermData,
@@ -474,13 +475,13 @@ describe('complete registration generation', () => {
     expect(result.diagnostics.join()).toMatch(/missing meeting/);
     assertValid(oscar, ['TEST 1000']);
   });
-  it('preserves timetable deduplication after exclusions and accepts an empty request', () => {
+  it('preserves distinct CRNs with equal timetables after exclusions and accepts an empty request', () => {
     const c = makeCourse({ A: section('10001'), B: section('10002') }, [
       ['10001'],
       ['10002'],
     ]);
     const oscar = new Oscar(makeData({ 'TEST 1000': c }), '202608');
-    expect(oscar.getCombinations(['TEST 1000'], [], [], [])).toHaveLength(1);
+    expect(oscar.getCombinations(['TEST 1000'], [], [], [])).toHaveLength(2);
     expect(
       oscar.getCombinations(['TEST 1000'], [], ['10001'], [])[0]?.crns
     ).toEqual(['10002']);
@@ -522,7 +523,7 @@ describe('complete registration generation', () => {
     );
     expect(oscar.getCombinations(['TEST 1000'], [], [], [])).toEqual([]);
   });
-  it('enumerates 4096 valid schedules within a generous performance bound', () => {
+  it('benchmark: enumerates and ranks all 4096 valid schedules', () => {
     const courses: Record<string, CrawlerCourse> = {};
     for (let i = 0; i < 6; i++) {
       const sections: Record<string, CrawlerSection> = {};
@@ -541,12 +542,31 @@ describe('complete registration generation', () => {
     );
     const oscar = new Oscar(d, '202608');
     const start = performance.now();
-    expect(
-      oscar.getCombinations(Object.keys(courses), [], [], [])
-    ).toHaveLength(4096);
-    expect(performance.now() - start).toBeLessThan(2000);
+    const combinations = oscar.getCombinations(
+      Object.keys(courses),
+      [],
+      [],
+      []
+    );
+    expect(combinations).toHaveLength(4096);
+    const generatedAt = performance.now();
+    oscar.sortingOptions.forEach((_, i) => {
+      expect(oscar.sortCombinations(combinations, i, [])).toHaveLength(4096);
+    });
+    const finishedAt = performance.now();
+    if (process.env['SCHEDULER_BENCHMARK']) {
+      // eslint-disable-next-line no-console
+      jest.mocked(console.info).mockRestore();
+      // eslint-disable-next-line no-console
+      console.info({
+        combinations: combinations.length,
+        generationMs: generatedAt - start,
+        rankingAllOptionsMs: finishedAt - generatedAt,
+      });
+    }
+    expect(finishedAt - start).toBeLessThan(5000);
   });
-  it('handles a representative search without a combinatorial performance regression', () => {
+  it('benchmark: rejects conflicting choices in a representative eight-course search', () => {
     const courses: Record<string, CrawlerCourse> = {};
     for (let i = 0; i < 8; i++) {
       courses[`TEST ${i}`] = makeCourse(
@@ -581,4 +601,241 @@ describe('authoritative linked-section response parser', () => {
       linkedHtml.replace('84090', 'TBA'),
     ].forEach((html) => expect(() => parseLinkedSections(html)).toThrow());
   });
+});
+
+describe('optimization and complete alternatives', () => {
+  it('includes pinned required components in ranking and ignores recurring events as class days', () => {
+    const oscar = new Oscar(makeData({ 'TEST 1000': linked() }), '202608');
+    const combinations = oscar.getCombinations(
+      ['TEST 1000'],
+      ['10001'],
+      [],
+      [{ ...event, days: ['F'] }]
+    );
+    expect(combinations).toHaveLength(2);
+    expect(combinations[0]?.scheduledCrns).toContain('10001');
+    const first = combinations[0];
+    if (!first) throw new Error('Missing combination');
+    expect(oscar.sortingOptions[4]?.calculateFactor(first, [])).toBe(1);
+    const idle = oscar.sortCombinations(combinations, 5, []);
+    expect(idle[0]?.crns).toEqual(['10002']);
+    const best = idle[0];
+    if (!best) throw new Error('Missing combination');
+    expect(oscar.sortingOptions[5]?.calculateFactor(best, [])).toBeGreaterThan(
+      0
+    );
+  });
+
+  it('ranks lexicographically by days before idle time and walking certainty', () => {
+    const c = makeCourse(
+      {
+        A: section('10001'),
+        B: section('10002', 0, 1, 'TF'),
+        C: section('10003', 0, 2),
+      },
+      [['10001'], ['10002'], ['10003']]
+    );
+    const d = makeData({
+      'TEST 1000': c,
+      'TEST 2000': makeCourse({ A: section('20001', 0, 1) }, [['20001']]),
+    });
+    const oscar = new Oscar(d, '202608');
+    const combinations = oscar.getCombinations(
+      ['TEST 1000', 'TEST 2000'],
+      ['20001'],
+      [],
+      []
+    );
+    expect(
+      oscar.sortCombinations(combinations, 6, []).map((v) => v.crns)
+    ).toEqual([['10001'], ['10003'], ['10002']]);
+  });
+
+  it('retains inferred alternatives when only instructor similarity suggests a link', () => {
+    const c = makeCourse(
+      {
+        A: section('10001'),
+        B: section('10002', 0, 0, 'T'),
+        X: section('10003', 1, 1),
+        Y: section('10004', 1, 2),
+      },
+      []
+    );
+    c[5] = undefined;
+    const y = c[1]['Y']?.[1][0];
+    if (!y) throw new Error('Missing fixture');
+    y[4] = ['Another Professor'];
+    const oscar = new Oscar(makeData({ 'TEST 1000': c }), '202608');
+    expect(oscar.getCombinations(['TEST 1000'], [], [], [])).toHaveLength(4);
+  });
+
+  it('matches a brute-force Cartesian oracle for every constructed valid combination', () => {
+    const d = makeData({
+      'TEST 1000': linked(),
+      'TEST 2000': makeCourse(
+        {
+          A: section('20001', 0, 2),
+          B: section('20002', 0, 0, 'T'),
+          C: section('20003', 0, 0, 'T'),
+        },
+        [['20001'], ['20002'], ['20003']]
+      ),
+      'TEST 3000': makeCourse(
+        { A: section('30001', 0, 1, 'T'), B: section('30002', 0, 1) },
+        [['30001'], ['30002']]
+      ),
+    });
+    const oscar = new Oscar(d, '202608');
+    const desired = Object.keys(d.courses);
+    oscar.getCombinations(desired, [], [], []); // construct bundles
+    const product = oscar.courses.reduce<import('./Section').default[][]>(
+      (selected, c) =>
+        selected.flatMap((prefix) =>
+          c.registrationBundles.map((bundle) => [...prefix, ...bundle])
+        ),
+      [[]]
+    );
+    for (const pins of [[], ['10001'], ['10003'], ['20002']]) {
+      for (const exclusions of [[], ['10002'], ['20001']]) {
+        for (const events of [[], [event]]) {
+          const expected = product
+            .filter(
+              (sections) =>
+                pins.every((crn) => sections.some((s) => s.crn === crn)) &&
+                !sections.some(
+                  (s, i) =>
+                    exclusions.includes(s.crn) ||
+                    events.some((e) =>
+                      hasConflictBetweenSectionAndEvent(s, e)
+                    ) ||
+                    sections
+                      .slice(0, i)
+                      .some((other) => hasConflictBetween(s, other))
+                )
+            )
+            .map((sections) =>
+              sections
+                .map((s) => s.crn)
+                .sort()
+                .join(',')
+            )
+            .sort();
+          const actual = oscar
+            .getCombinations(desired, pins, exclusions, events)
+            .map((combo) => [...pins, ...combo.crns].sort().join(','))
+            .sort();
+          expect(actual).toEqual(expected);
+        }
+      }
+    }
+  });
+});
+
+it('ranks walking time using pins and known routes, independently of requested course order', () => {
+  const c = makeCourse(
+    {
+      A: section('10001', 0, 1),
+      B: section('10002', 0, 1),
+      C: section('10003', 0, 1),
+    },
+    [['10001'], ['10002'], ['10003']]
+  );
+  const d = makeData({
+    'TEST 1000': c,
+    'TEST 2000': makeCourse({ A: section('20001') }, [['20001']]),
+  });
+  d.caches.locations = FALLBACK_GT_LOCATIONS.slice(0, 2).map((l) => l.coords);
+  Object.values(c[1]).forEach((s, i) => {
+    const m = s[1][0];
+    if (m) m[3] = i;
+  });
+  const oscar = new Oscar(d, '202608');
+  for (const desired of [
+    ['TEST 1000', 'TEST 2000'],
+    ['TEST 2000', 'TEST 1000'],
+  ]) {
+    const combinations = oscar.getCombinations(desired, ['20001'], [], []);
+    expect(
+      oscar.sortCombinations(combinations, 3, []).map((v) => v.crns)
+    ).toEqual([['10001'], ['10002'], ['10003']]);
+  }
+});
+
+it('keeps sort indices and ranks span after idle for Efficient Week, before idle for Shortest Class Week', () => {
+  const c = linked();
+  const first = c[1]['A1'];
+  const second = c[1]['A2'];
+  if (!first || !second) throw new Error('Missing fixture');
+  first[1] = [
+    [2, 'M', 'Room', 0, [], 0, -1, -1],
+    [0, 'T', 'Room', 0, [], 0, -1, -1],
+  ];
+  second[1] = [
+    [1, 'M', 'Room', 0, [], 0, -1, -1],
+    [0, 'F', 'Room', 0, [], 0, -1, -1],
+  ];
+  const third = section('10004', 1, 1);
+  third[1].push([0, 'W', 'Room', 0, [], 0, -1, -1]);
+  c[1]['A3'] = third;
+  c[5]?.bundles.push(['10001', '10004']);
+  const oscar = new Oscar(makeData({ 'TEST 1000': c }), '202608');
+  expect(oscar.sortingOptions.map((s) => s.label)).toEqual([
+    'Most Compact',
+    'Earliest Ending',
+    'Latest Beginning',
+    'Least Travel Time',
+    'Fewest Class Days',
+    'Least Idle Time',
+    'Efficient Week',
+    'Shortest Class Week',
+  ]);
+  const combinations = oscar.getCombinations(['TEST 1000'], ['10001'], [], []);
+  expect(combinations).toHaveLength(3);
+  expect(
+    oscar.sortCombinations(combinations, 6, []).map((v) => v.crns)
+  ).toEqual([['10004'], ['10003'], ['10002']]);
+  expect(
+    oscar.sortCombinations(combinations, 7, []).map((v) => v.crns)
+  ).toEqual([['10002'], ['10004'], ['10003']]);
+});
+
+it('recommends complete five-day schedules when four-day schedules are impossible', () => {
+  const c = linked();
+  const lab = c[1]['A1'];
+  if (!lab) throw new Error('Missing fixture');
+  lab[1] = [[1, 'F', 'Lab', 0, [], 0, -1, -1]];
+  c[5] = { status: 'complete', source, bundles: [['10001', '10002']] };
+  const other = section('20001', 0, 0, 'TWR');
+  const oscar = new Oscar(
+    makeData({
+      'TEST 1000': c,
+      'TEST 2000': makeCourse({ A: other }, [['20001']]),
+    }),
+    '202608'
+  );
+  const combinations = oscar.getCombinations(
+    ['TEST 1000', 'TEST 2000'],
+    ['10001'],
+    [],
+    []
+  );
+  expect(combinations).toHaveLength(1);
+  for (const index of [6, 7]) {
+    const sorted = oscar.sortCombinations(combinations, index, []);
+    expect(sorted[0]?.scheduledCrns?.sort()).toEqual([
+      '10001',
+      '10002',
+      '20001',
+    ]);
+    expect(
+      oscar.sortingOptions[4]?.calculateFactor(
+        sorted[0] as import('../../types').Combination,
+        []
+      )
+    ).toBe(5);
+  }
+  assertValid(oscar, ['TEST 1000', 'TEST 2000'], ['10001']);
+  expect(
+    oscar.getCombinations(['TEST 1000', 'TEST 2000'], ['10001'], ['10002'], [])
+  ).toEqual([]);
 });

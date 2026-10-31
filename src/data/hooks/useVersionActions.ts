@@ -2,6 +2,7 @@ import { castDraft, Draft, Immutable } from 'immer';
 import { useCallback } from 'react';
 
 import { softError, ErrorWithFields } from '../../log';
+import { lexicographicCompare } from '../../utils/misc';
 import {
   defaultSchedule,
   generateScheduleVersionId,
@@ -100,21 +101,19 @@ export default function useVersionActions({
             return;
           }
 
-          // Select the previous version if we can
-          // by sorting all versions by their createdAt date.
-          const sorted = entries.sort(([, a], [, b]) =>
-            a.createdAt > b.createdAt ? 0 : 1
+          // Match the selector's chronological order, with stable ties.
+          // Remove the target before choosing, so deleting the first version
+          // can never reselect its now-missing ID.
+          const sorted = entries.sort(
+            ([idA, a], [idB, b]) =>
+              lexicographicCompare(a.createdAt, b.createdAt) ||
+              lexicographicCompare(idA, idB)
           );
           const indexOfDeleting = sorted.findIndex(
             ([versionId]) => versionId === id
           );
-          if (indexOfDeleting === -1) return;
-
-          const newIndex = Math.max(indexOfDeleting - 1, 0);
-
-          // If the remaining versions isn't empty,
-          // then this index must be valid
-          setVersion(sorted[newIndex]?.[0] ?? '');
+          const remaining = sorted.filter(([versionId]) => versionId !== id);
+          setVersion(remaining[Math.max(indexOfDeleting - 1, 0)]?.[0] ?? '');
         } else {
           // Just delete the version
           delete draft.versions[id];

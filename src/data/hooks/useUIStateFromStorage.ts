@@ -63,14 +63,14 @@ export default function useUIStateFromStorage(): HookResult {
           ...current,
           versionStates: {
             ...current.versionStates,
-            [current.currentTerm]: {
+            [currentTerm]: {
               currentVersion: next,
             },
           },
         };
       });
     },
-    [setUIState]
+    [setUIState, currentTerm]
   );
 
   return {

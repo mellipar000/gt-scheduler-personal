@@ -411,7 +411,10 @@ function ContextProvider({
     versions.sort((a, b) => {
       const createdAtA = termScheduleData.versions[a.id]?.createdAt ?? '';
       const createdAtB = termScheduleData.versions[b.id]?.createdAt ?? '';
-      return lexicographicCompare(createdAtA, createdAtB);
+      return (
+        lexicographicCompare(createdAtA, createdAtB) ||
+        lexicographicCompare(a.id, b.id)
+      );
     });
     return versions;
   }, [termScheduleData.versions]);
