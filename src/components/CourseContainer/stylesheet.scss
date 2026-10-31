@@ -6,6 +6,16 @@
   align-items: stretch;
   border-right: 1px solid $color-border;
 
+  .credit-total {
+    padding: 8px;
+    font-weight: 600;
+
+    small {
+      display: block;
+      font-weight: normal;
+    }
+  }
+
   .scroller {
     flex: 1;
     overflow-y: auto;

@@ -26,3 +26,36 @@ it('distinguishes loading, unavailable, and a valid zero historical professor GP
   rerender(<ProfessorInfoCard {...props} professorGpa={0} />);
   expect(getByText('0.00')).toBeDefined();
 });
+
+it('links to a school-scoped professor search separately from historical GPA', () => {
+  const course = new Oscar(
+    fixture as unknown as CrawlerTermData,
+    '202608'
+  ).findCourse('AE 2610');
+  if (!course) throw new Error('Missing fixture');
+  const { getByRole, getByText, rerender, queryByRole } = render(
+    <ProfessorInfoCard
+      course={course}
+      professorName="Ada Lovelace"
+      professorGpa={3.2}
+      displaySectionInfo={false}
+    />
+  );
+  expect(getByText('Course Critique GPA')).toBeDefined();
+  expect(
+    getByRole('link', { name: /Search Rate My Professors/ }).getAttribute(
+      'href'
+    )
+  ).toBe(
+    'https://www.ratemyprofessors.com/search/professors/361?q=Ada%20Lovelace'
+  );
+  rerender(
+    <ProfessorInfoCard
+      course={course}
+      professorName="TBA"
+      professorGpa={null}
+      displaySectionInfo={false}
+    />
+  );
+  expect(queryByRole('link', { name: /Search Rate My Professors/ })).toBeNull();
+});

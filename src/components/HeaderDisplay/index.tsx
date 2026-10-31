@@ -59,7 +59,7 @@ type PaletteState =
     };
 
 export type HeaderDisplayProps = {
-  totalCredits?: number | null;
+  totalCredits?: string | number | null;
   currentTab: string;
   onChangeTab: (newTab: string) => void;
   onToggleMenu: () => void;
@@ -186,7 +186,10 @@ export default function HeaderDisplay({
         </>
       )}
 
-      <span className="credits">
+      <span
+        className="credits"
+        title="Crawler estimate; verify variable credits in OSCAR"
+      >
         {totalCredits === null ? (
           <Spinner size="small" style={{ marginRight: 8 }} />
         ) : (

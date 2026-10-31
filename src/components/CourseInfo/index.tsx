@@ -11,6 +11,7 @@ import { getSemesterName } from '../../utils/semesters';
 import ProfessorInfoCard from '../ProfessorInfoCard';
 import Button from '../Button';
 import { MajorRestrictionsView } from '../MajorRestrictionsView';
+import { courseCredits, formatCredits } from '../../utils/credits';
 
 import './stylesheet.scss';
 
@@ -24,7 +25,7 @@ export type CourseInfoProps = {
 type CourseHeaderProps = {
   courseId: string;
   title: string;
-  credits?: number;
+  credits?: string;
   isModal?: boolean;
   onHide?: () => void;
 };
@@ -36,10 +37,7 @@ function CourseHeader({
   isModal = false,
   onHide,
 }: CourseHeaderProps): React.ReactElement {
-  const creditText =
-    credits !== undefined
-      ? `${credits} Credit${credits !== 1 ? 's' : ''}`
-      : 'N/A';
+  const creditText = `${credits ?? 'Unresolved'} Credits (crawler estimate)`;
 
   if (isModal) {
     return (
@@ -79,7 +77,8 @@ export default function CourseInfo({
   isModal = false,
   onHide,
 }: CourseInfoProps): React.ReactElement {
-  const [{ oscar, term }] = useContext(ScheduleContext);
+  const [{ oscar, term, pinnedCrns, excludedCrns }] =
+    useContext(ScheduleContext);
   const course = useMemo(() => oscar.findCourse(courseId), [oscar, courseId]);
 
   const [isLoaded, setIsLoaded] = useState(false);
@@ -121,7 +120,9 @@ export default function CourseInfo({
         ).replace(/^\(|\)$/g, '')
       : 'None';
   }, [course?.prereqs]);
-  const credits = useMemo(() => course?.sections?.[0]?.credits, [course]);
+  const credits = formatCredits(
+    courseCredits(course, pinnedCrns, excludedCrns)
+  );
 
   /**
    * Get the currterm + 5 terms prior to current term in course crit response

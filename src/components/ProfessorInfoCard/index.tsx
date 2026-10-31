@@ -17,6 +17,7 @@ import useScrollFade from '../../hooks/useScrollFade';
 import { OccupiedInfo } from '../../types';
 import Modal from '../Modal';
 import { MajorRestrictionsView } from '../MajorRestrictionsView';
+import professorSearchUrl from '../../utils/professorSearch';
 
 import './stylesheet.scss';
 
@@ -181,7 +182,7 @@ export default function ProfessorInfoCard({
   const professorMetrics: Metric[] = useMemo(() => {
     return [
       {
-        label: 'Course GPA',
+        label: 'Course Critique GPA',
         value:
           professorGpa === undefined
             ? 'Loading...'
@@ -214,6 +215,15 @@ export default function ProfessorInfoCard({
     <div className="ProfessorInfo">
       <div className="professor-header">
         <p className="professor-name">{professorName}</p>
+        {professorSearchUrl(professorName) && (
+          <a
+            href={professorSearchUrl(professorName) ?? undefined}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Search Rate My Professors at Georgia Tech
+          </a>
+        )}
       </div>
 
       <MetricsCard metrics={professorMetrics} />
