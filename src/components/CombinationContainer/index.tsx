@@ -45,9 +45,14 @@ export default function CombinationContainer({
     setConfirmReset(true);
   }, []);
 
-  const combinations = useMemo(
+  const { combinations, diagnostics } = useMemo(
     () =>
-      oscar.getCombinations(desiredCourses, pinnedCrns, excludedCrns, events),
+      oscar.getCombinationResult(
+        desiredCourses,
+        pinnedCrns,
+        excludedCrns,
+        events
+      ),
     [oscar, desiredCourses, pinnedCrns, excludedCrns, events]
   );
   const sortedCombinations = useMemo(
@@ -81,6 +86,23 @@ export default function CombinationContainer({
             >
               Reset Sections
             </Button>
+            {desiredCourses.some(
+              (id) => oscar.findCourse(id)?.registrationInferred
+            ) && (
+              <small
+                className="generation-diagnostics"
+                title="Registration links are inferred from crawler section data. Confirm linked sections in OSCAR before registration."
+              >
+                Registration links unverified
+              </small>
+            )}
+            {diagnostics.length > 0 && (
+              <div role="status" className="generation-diagnostics">
+                {diagnostics.map((message) => (
+                  <p key={message}>{message}</p>
+                ))}
+              </div>
+            )}
             <div className="scroller">
               <AutoSizer>
                 {({ width, height }): React.ReactElement => (

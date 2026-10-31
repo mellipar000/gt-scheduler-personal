@@ -1,5 +1,3 @@
-import { firebaseConfig } from './data/firebase';
-
 const OPEN = 6 * 60;
 const CLOSE = 24 * 60 - 1; // 11:59 PM
 const FINALS_OPEN = 8 * 60;
@@ -122,9 +120,10 @@ const COURSE_TABS = ['Courses', 'Recurring Events'];
 const COURSES = 0;
 const RECURRING_EVENTS = 1;
 
-const BACKEND_BASE_URL = 'https://gt-scheduler.azurewebsites.net';
-const FIREBASE_PROJECT_ID = firebaseConfig.projectId || `gt-scheduler-web-dev`;
-const CLOUD_FUNCTION_BASE_URL = `https://us-east1-${FIREBASE_PROJECT_ID}.cloudfunctions.net`;
+const BACKEND_BASE_URL =
+  process.env['REACT_APP_BACKEND_URL'] || 'http://localhost:5002';
+const CLOUD_FUNCTION_BASE_URL =
+  process.env['REACT_APP_CLOUD_FUNCTION_URL'] || '';
 
 // Use with served url in env file if you want to run with a local crawler
 // eg. http://localhost:8080

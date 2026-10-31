@@ -26,3 +26,5 @@ yarn-error.log*
 .env
 
 archive/
+/.local-data/
+/public/course-data/

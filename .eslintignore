@@ -10,3 +10,5 @@
 /tmp/**
 /src/vendor/**
 src/utils/mapbox/scripts/
+/.local-data/
+/public/course-data/

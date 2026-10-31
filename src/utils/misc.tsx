@@ -125,7 +125,7 @@ export const hasConflictBetweenMeetings = (
 ): boolean | undefined =>
   meeting1.period &&
   meeting2.period &&
-  DAYS.some(
+  ['M', 'T', 'W', 'R', 'F', 'S', 'U'].some(
     (day) => meeting1.days.includes(day) && meeting2.days.includes(day)
   ) &&
   meeting1.period.start < meeting2.period.end &&
@@ -167,10 +167,10 @@ export function unique<T>(array: T[]): T[] {
 }
 
 export const isLab = (section: Section): boolean =>
-  ['Lab', 'Studio'].some((type) => section.scheduleType.includes(type));
+  /lab(?:oratory)?|studio/i.test(section.scheduleType);
 
 export const isLecture = (section: Section): boolean =>
-  section.scheduleType.includes('Lecture');
+  /lecture|breakout/i.test(section.scheduleType);
 
 export function humanizeArray<T>(array: T[], conjunction = 'and'): string {
   if (array.length <= 2) {

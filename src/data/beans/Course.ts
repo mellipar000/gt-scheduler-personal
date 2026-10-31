@@ -2,6 +2,7 @@ import axios from 'axios';
 import { decode } from 'html-entities';
 
 import Section from './Section';
+import inferRegistrationBundles from './inferRegistrationBundles';
 import Oscar from './Oscar';
 import {
   CourseGpa,
@@ -11,7 +12,6 @@ import {
   Period,
 } from '../../types';
 import {
-  hasConflictBetween,
   isLab,
   isLecture,
   isAxiosNetworkError,
@@ -77,6 +77,14 @@ export default class Course {
   coreqs: CrawlerCorequisites | undefined;
 
   hasLab: boolean;
+
+  registrationBundles: Section[][] = [];
+
+  registrationIssue?: string;
+
+  registrationInferred = false;
+
+  private inferenceLoaded = false;
 
   onlyLectures: Section[] | undefined;
 
@@ -148,78 +156,90 @@ export default class Course {
     this.ratings = undefined;
     this.professorRatings = undefined;
 
-    const onlyLectures = this.sections.filter(
+    this.onlyLectures = this.sections.filter(
       (section) => isLecture(section) && !isLab(section)
     );
-    const onlyLabs = this.sections.filter(
+    this.onlyLabs = this.sections.filter(
       (section) => isLab(section) && !isLecture(section)
     );
-    this.hasLab = !!onlyLectures.length && !!onlyLabs.length;
-    if (this.hasLab) {
-      const matchLabFromId = (lab: Section, lecture: Section): boolean =>
-        // note: checking both ways because GT registrar
-        // reversed studio and lecture sections for MATH 1553
-        lecture.id.startsWith(lab.id) || lab.id.startsWith(lecture.id);
-      const matchLabFromInstructors = (
-        lab: Section,
-        lecture: Section
-      ): boolean =>
-        // match lecture and lab sections
-        // if there are *any* matching instructors
-        // fixes issue with PHYS 2211 and 2212
-        // no longer matching section id letters
-        lab.instructors.filter((instructor) =>
-          lecture.instructors.includes(instructor)
-        ).length > 0;
+    this.allInOnes = this.sections.filter(
+      (section) => isLecture(section) && isLab(section)
+    );
+    this.hasLab = this.onlyLabs.length > 0 || this.allInOnes.length > 0;
+    this.sectionGroups = this.distinct(this.sections);
 
-      for (const lecture of onlyLectures) {
-        lecture.associatedLabs = onlyLabs.filter((lab) =>
-          matchLabFromId(lab, lecture)
-        );
-        // if no matching section id letters found, match by profs
-        if (!lecture.associatedLabs.length) {
-          lecture.associatedLabs = onlyLabs.filter(
-            (lab) =>
-              matchLabFromInstructors(lab, lecture) &&
-              !hasConflictBetween(lab, lecture)
-          );
-        }
-      }
-      for (const lab of onlyLabs) {
-        lab.associatedLectures = onlyLectures.filter((lecture) =>
-          matchLabFromId(lab, lecture)
-        );
-        if (!lab.associatedLectures.length) {
-          lab.associatedLectures = onlyLectures.filter(
-            (lecture) =>
-              matchLabFromInstructors(lab, lecture) &&
-              !hasConflictBetween(lecture, lab)
-          );
-        }
-      }
-      const lonelyLectures = onlyLectures.filter(
-        (lecture) => !lecture.associatedLabs.length
-      );
-      const lonelyLabs = onlyLabs.filter(
-        (lab) => !lab.associatedLectures.length
-      );
-      for (const lecture of lonelyLectures) {
-        lecture.associatedLabs = lonelyLabs.filter(
-          (lab) => !hasConflictBetween(lecture, lab)
-        );
-      }
-      for (const lab of lonelyLabs) {
-        lab.associatedLectures = lonelyLectures.filter(
-          (lecture) => !hasConflictBetween(lecture, lab)
-        );
-      }
-      this.onlyLectures = onlyLectures;
-      this.onlyLabs = onlyLabs;
-      this.allInOnes = this.sections.filter(
-        (section) => isLecture(section) && isLab(section)
-      );
+    const registration = data[5];
+    const sectionMap = new Map(this.sections.map((s) => [s.crn, s]));
+    if (
+      this.sections.length !== Object.keys(sections).length ||
+      sectionMap.size !== this.sections.length ||
+      !this.sections.length
+    ) {
+      this.registrationIssue =
+        'Section data is missing, duplicated, or could not be read.';
+    } else if (
+      !registration ||
+      registration.status !== 'complete' ||
+      typeof registration.source !== 'string' ||
+      !registration.source.trim()
+    ) {
+      this.registrationInferred = true;
+    } else if (
+      !Array.isArray(registration.bundles) ||
+      registration.bundles.some(
+        (bundle) =>
+          !Array.isArray(bundle) ||
+          !bundle.length ||
+          new Set(bundle).size !== bundle.length ||
+          bundle.some((crn) => !sectionMap.has(crn))
+      )
+    ) {
+      this.registrationIssue =
+        'Registration requirements contain missing or invalid CRNs.';
     } else {
-      this.sectionGroups = this.distinct(this.sections);
+      const seen = new Set<string>();
+      for (const bundle of registration.bundles) {
+        const key = [...bundle].sort().join(',');
+        if (!seen.has(key)) {
+          seen.add(key);
+          const resolved = bundle
+            .map((crn) => sectionMap.get(crn) as Section)
+            .sort(
+              (a, b) => this.sections.indexOf(a) - this.sections.indexOf(b)
+            );
+          this.registrationBundles.push(resolved);
+          // Display associations come from complete registration bundles.
+          for (const section of resolved) {
+            section.associatedLabs = Array.from(
+              new Set([
+                ...section.associatedLabs,
+                ...resolved.filter(
+                  (other) => other !== section && isLab(other)
+                ),
+              ])
+            );
+            section.associatedLectures = Array.from(
+              new Set([
+                ...section.associatedLectures,
+                ...resolved.filter(
+                  (other) => other !== section && isLecture(other)
+                ),
+              ])
+            );
+          }
+        }
+      }
+    }
+  }
+
+  prepareRegistrationBundles(): void {
+    if (this.registrationInferred && !this.inferenceLoaded) {
+      this.inferenceLoaded = true;
+      this.registrationBundles = inferRegistrationBundles(this.sections);
+      if (!this.registrationBundles.length) {
+        this.registrationIssue =
+          'No complete combination of the available component types could be inferred from section links and meeting times.';
+      }
     }
   }
 
@@ -327,6 +347,7 @@ export default class Course {
   private async fetchGpaInner(): Promise<CourseGpa | null> {
     // We have to clean up the course ID before sending it to the API,
     // since courses like CHEM 1212K should become CHEM 1212
+    if (!CLOUD_FUNCTION_BASE_URL) return null;
     const id = `${this.subject} ${this.number.replace(/\D/g, '')}`;
     const encodedCourse = encodeURIComponent(id);
     const url = `${COURSE_CRITIQUE_API_URL}?courseID=${encodedCourse}`;

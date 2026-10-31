@@ -8,3 +8,6 @@
 /tests/fixtures/**
 /tests/performance/**
 /tmp/**
+
+/.local-data/
+/public/course-data/

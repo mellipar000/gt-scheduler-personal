@@ -25,61 +25,34 @@ To implement its goal of facilitating schedule creation and class exploration, G
 - Seating information for a single section, which is requested on demand and sent through our CORS proxy in the [Backend application](https://api.github.com/repos/gt-scheduler/crawler/) to [Oscar](https://oscar.gatech.edu/) (Georgia Tech's registration management system): https://gt-scheduler.azurewebsites.net/proxy/class_section?term=202008&crn=87086
 - Course/instructor GPA information, which is fetched from [Course Critique](https://critique.gatech.edu/)'s API: https://c4citk6s9k.execute-api.us-east-1.amazonaws.com/test/data/course?courseID=CS%201331
 
-Once features are merged into the `main` branch, they are automatically deployed to the `gh-pages` branch using a [GitHub Action workflow](https://github.com/gt-scheduler/website/blob/main/.github/workflows/deploy.yml). This branch is set up to serve traffic to the public site, https://gt-scheduler.org/, using the [GitHub Pages](https://pages.github.com/) service.
+This personal fork has no automatic deployment, analytics, or Tag Manager. Firebase and Sentry are disabled by default. No original developers' credentials are needed.
 
-The website uses [Google Analytics](https://marketingplatform.google.com/about/analytics/) for aggregate analytics and information about how many people are using the app. It also utilizes [Sentry](https://sentry.io/welcome/) for automatic error reporting.
+## Running locally
 
-## 🚀 Running Locally
+Use Node.js 22 LTS and Yarn Classic 1.22.22 (also tested with Node.js 24.18.1).
 
-### Requisite software
-
-- [Node.js](https://nodejs.org/en/) (any recent version will probably work)
-- Installation of the [`yarn` package manager](https://classic.yarnpkg.com/en/docs/install/) **version 1** (support for version 2 is untested)
-
-### Running the app
-
-After cloning the repository to your local computer, run the following command in the repo folder:
-
-```
-yarn install
+```powershell
+npx --yes yarn@1.22.22 install --frozen-lockfile
+npm start
 ```
 
-This may take a couple minutes and will create a new folder called `node_modules` with all of the dependencies installed within. This only needs to be run once.
+Open [localhost:3000](http://localhost:3000), select any available term, and add courses normally. Published crawler data supplies all courses and terms without manual imports. Verified bundles take priority where provided; otherwise the scheduler infers complete component combinations using schedule types, section IDs, instructors, campuses, and conflicts. A small “Registration links unverified” note identifies inferred results. Confirm those links in OSCAR before registration.
 
-Then, to start a local development version of the frontend app, run:
+The optional `npm run data:fetch -- 202608 "AE 2610"` importer remains available for debugging verified relationships. To use its local snapshot explicitly, set `REACT_APP_LOCAL_CRAWLER_URL=/course-data` in `.env.local`. Normal scheduling does not require this step.
 
+Core scheduling needs no accounts, maps, ratings, or private secrets. Cloud features require your own services and explicit configuration; upstream Firebase project IDs are blocked. See [.env.example](.env.example).
+
+```powershell
+npm test -- --watchAll=false --runInBand --cacheDirectory=.local-data/jest-cache
+npm run lint
+npm run format:check
+npx tsc --noEmit
+npm run build
 ```
-yarn start
-```
 
-The app should then be viewable at [http://localhost:3000](http://localhost:3000), which you can open a new browser tab to view.
+A workspace-local Jest cache avoids Windows sandbox temporary-directory rename failures. Zod 3.25.76 and TypeScript 4.9.5 align with Create React App 5's type-checker. Existing dependency peer warnings and the stale Browserslist database do not require private credentials.
 
-With that, you're able to make changes to the code and have them be re-built and viewable after a short delay in the same tab. This is the main workflow for adding new features or fixing bugs and testing them in the actual app.
-
-> **Warning**
->
-> When running the development server (and when building the site),
-> a large number of warnings may appear in the console that look something like:
->
-> ```
-> WARNING in ./node_modules/parse5/dist/common/token.js
-> Module Warning (from ./node_modules/source-map-loader/dist/cjs.js):
-> Failed to parse source map from '.../website/node_modules/parse5/dist/common/token.js.map' file: Error: ENOENT: no such file or directory, open '.../website/node_modules/parse5/dist/common/token.js.map'
->  @ ./node_modules/parse5/dist/index.js 13:0-44 14:0-27
->  @ ...
-> ```
->
-> **These can be safely ignored.**
->
-> They are due to a combination of misconfiguration in a few transitive dependencies
-> (such as `parse5`, `/@firebase/auth`, and `exponential-backoff`)
-> and the overzealousness of `create-react-app`'s default configuration in reporting non-issues.
->
-> See https://github.com/facebook/create-react-app/discussions/11767 for more details.
-
-### Secrets (only for BoG Developers)
-- `yarn run secrets:linux` - obtain app secrets for Linux and MacOS; ask Engineering Manager for password
-- `yarn run secrets:windows` - obtain app secrets for Windows; ask Engineering Manager for password
+See [SCHEDULE_CORRECTNESS.md](SCHEDULE_CORRECTNESS.md) for evidence, the crawler contract, and manual checks.
 
 ### Linting
 
