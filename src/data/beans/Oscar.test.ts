@@ -760,3 +760,82 @@ it('ranks walking time using pins and known routes, independently of requested c
     ).toEqual([['10001'], ['10002'], ['10003']]);
   }
 });
+
+it('keeps sort indices and ranks span after idle for Efficient Week, before idle for Shortest Class Week', () => {
+  const c = linked();
+  const first = c[1]['A1'];
+  const second = c[1]['A2'];
+  if (!first || !second) throw new Error('Missing fixture');
+  first[1] = [
+    [2, 'M', 'Room', 0, [], 0, -1, -1],
+    [0, 'T', 'Room', 0, [], 0, -1, -1],
+  ];
+  second[1] = [
+    [1, 'M', 'Room', 0, [], 0, -1, -1],
+    [0, 'F', 'Room', 0, [], 0, -1, -1],
+  ];
+  const third = section('10004', 1, 1);
+  third[1].push([0, 'W', 'Room', 0, [], 0, -1, -1]);
+  c[1]['A3'] = third;
+  c[5]?.bundles.push(['10001', '10004']);
+  const oscar = new Oscar(makeData({ 'TEST 1000': c }), '202608');
+  expect(oscar.sortingOptions.map((s) => s.label)).toEqual([
+    'Most Compact',
+    'Earliest Ending',
+    'Latest Beginning',
+    'Least Travel Time',
+    'Fewest Class Days',
+    'Least Idle Time',
+    'Efficient Week',
+    'Shortest Class Week',
+  ]);
+  const combinations = oscar.getCombinations(['TEST 1000'], ['10001'], [], []);
+  expect(combinations).toHaveLength(3);
+  expect(
+    oscar.sortCombinations(combinations, 6, []).map((v) => v.crns)
+  ).toEqual([['10004'], ['10003'], ['10002']]);
+  expect(
+    oscar.sortCombinations(combinations, 7, []).map((v) => v.crns)
+  ).toEqual([['10002'], ['10004'], ['10003']]);
+});
+
+it('recommends complete five-day schedules when four-day schedules are impossible', () => {
+  const c = linked();
+  const lab = c[1]['A1'];
+  if (!lab) throw new Error('Missing fixture');
+  lab[1] = [[1, 'F', 'Lab', 0, [], 0, -1, -1]];
+  c[5] = { status: 'complete', source, bundles: [['10001', '10002']] };
+  const other = section('20001', 0, 0, 'TWR');
+  const oscar = new Oscar(
+    makeData({
+      'TEST 1000': c,
+      'TEST 2000': makeCourse({ A: other }, [['20001']]),
+    }),
+    '202608'
+  );
+  const combinations = oscar.getCombinations(
+    ['TEST 1000', 'TEST 2000'],
+    ['10001'],
+    [],
+    []
+  );
+  expect(combinations).toHaveLength(1);
+  for (const index of [6, 7]) {
+    const sorted = oscar.sortCombinations(combinations, index, []);
+    expect(sorted[0]?.scheduledCrns?.sort()).toEqual([
+      '10001',
+      '10002',
+      '20001',
+    ]);
+    expect(
+      oscar.sortingOptions[4]?.calculateFactor(
+        sorted[0] as import('../../types').Combination,
+        []
+      )
+    ).toBe(5);
+  }
+  assertValid(oscar, ['TEST 1000', 'TEST 2000'], ['10001']);
+  expect(
+    oscar.getCombinations(['TEST 1000', 'TEST 2000'], ['10001'], ['10002'], [])
+  ).toEqual([]);
+});

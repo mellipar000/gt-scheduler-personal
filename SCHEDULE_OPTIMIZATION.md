@@ -6,7 +6,8 @@ registration and scheduling correctness fixes.
 ## Ranking semantics
 
 - Existing options retain their indices (0–3). Fewest Class Days, Least Idle
-  Time and Efficient Week are appended at 4–6. Only new schedules default to 6;
+  Time and Efficient Week remain at 4–6. Shortest Class Week is appended at 7.
+  Only new schedules default to 6;
   saved schedules, migrations and clones retain their stored preference.
 - Fewest Class Days counts distinct Monday–Friday days with an actual in-person
   meeting. Required components and pins count. Explicit asynchronous sections,
@@ -21,9 +22,19 @@ registration and scheduling correctness fixes.
 - Missing coordinates or matrix routes are unknown, not zero. Travel ranking
   compares unknown-trip count first, then known walking seconds; identical valid
   coordinates confirm zero. No routing requests are made during generation.
-- Efficient Week compares class days, then total idle minutes, then the travel
-  ranking above. Stable ties preserve generation order. Metrics are cached per
-  generated combination and meeting occurrences are cached per meeting.
+- `weeklySpanMinutes` is the longest interval from the first in-person class
+  start to the last in-person class end in any actual Monday–Sunday instructional
+  week. It includes overnight intervals within that week, required components and
+  pins; it excludes async/remote meetings and custom events. Partial-term meetings
+  are clipped to their dates. Different weeks are never connected, and weeks with
+  no in-person classes contribute zero. A single class contributes its duration.
+- Efficient Week compares class days, total idle minutes, weekly span, then travel.
+  Shortest Class Week compares class days, weekly span, idle minutes, then travel.
+  Stable ties preserve generation order. Metrics are cached per generated
+  combination and meeting occurrences are cached per meeting.
+- Both options rank every feasible constructed schedule. There is no four-day
+  cutoff: five-day schedules remain recommended if required components and
+  conflict constraints make a shorter week impossible.
 
 ## Generator audit
 
@@ -39,6 +50,30 @@ Instructor similarity alone no longer discards alternatives. Inferred links are
 still heuristics, not registrar verification; explicit verified links override
 them. The search remains exhaustive over constructed alternatives and can grow
 exponentially for large requests. No solver rewrite or result cap was added.
+
+## Reset and deletion behavior
+
+Reset Sections removes all pins in the current schedule version and clears the
+hover preview. It retains courses, recurring events, exclusions, colors and the
+saved sorting preference. Its dialog describes that scope. Cancel, Escape and
+backdrop clicks leave the schedule unchanged. Switching term/version cancels an
+open confirmation; previews are cleared when the selected schedule changes.
+
+Delete Schedule removes the named version, including its courses and events,
+without touching other versions or terms. Both the header and comparison-panel
+confirmation are scoped to the displayed term/version and close on context changes.
+The header now permits deleting the last version, creating a new empty Primary
+with the default preference. Cancel/Escape/backdrop dismissal all close the dialog
+and clear its target together.
+
+Deleting the active version selects its previous chronological neighbor, or its
+next neighbor when deleting the first. Sorting uses creation time then ID, matching
+the header, and selects only surviving IDs. Non-active deletions preserve selection.
+Schedule writes use the existing functional Immer/local-storage pipeline. Persisted
+selection stays per term and per tab; schedule data continues syncing across tabs.
+Delayed selection callbacks are bound to their originating term. Tests exercise
+remount persistence, cross-tab deletion recovery and delayed term callbacks with
+real storage/extraction hooks. Upstream Firebase remains disabled by default.
 
 ## GPA source investigation
 
@@ -84,25 +119,27 @@ responses after the displayed course changes.
 
 The local cache directory avoids a Windows sandbox permission error when Jest
 renames transforms in its default temporary directory. It is gitignored.
-The benchmark includes generation and all seven ranking options for 4,096 valid
+The benchmark includes generation and all eight ranking options for 4,096 valid
 six-course schedules, plus a conflicting eight-course search. One local run took
-27 ms for generation and 195 ms for all ranking options. These are synthetic
+32 ms for generation and 439 ms for all ranking options. These are synthetic
 regression checks, not limits or guarantees for arbitrary course selections.
 
 ## Manual QA checklist
 
-1. Open an existing saved schedule and confirm its selected sort remains intact.
-   Create a new version and confirm Efficient Week is selected.
-2. Add a course with required lecture/lab components, pin either component, and
-   compare the new sorts. Confirm all components appear in each recommendation.
-3. Add a recurring event on an otherwise free weekday. Confirm it blocks
-   conflicting classes without adding a class day.
-4. Compare travel ordering with multiple meetings and pinned sections. Check
-   that an unknown room does not outrank a confirmed short route as zero travel.
-5. Open a course and professor history, then simulate offline access or a missing
-   GPA. Confirm Loading settles to a numeric GPA or Unavailable; reopen with a
-   warm cache. A valid zero GPA must display 0.00.
+1. Pin classes, hover a recommendation, then Reset Sections. Confirm only pins and
+   previews clear; courses, events, exclusions and sort remain after reload.
+2. Cancel Reset/Delete using Cancel, Escape and the backdrop; reopen each dialog.
+   Switch terms/versions while a confirmation is open and confirm it closes.
+3. Delete active first/middle/last versions and a non-active version; verify the
+   chosen surviving version and reload. Delete the final version and verify a fresh
+   empty Primary. Another term's schedules must remain intact.
+4. Compare Efficient Week and Shortest Class Week on partial-term lecture/lab
+   schedules with pins and async courses. When five weekdays are unavoidable,
+   confirm complete conflict-free recommendations still appear. Existing saved
+   sort selections must stay intact; new schedules default to Efficient Week.
+5. Check GPA history and offline/unavailable states, and travel ordering for
+   pinned multi-meeting sections and unknown rooms, as covered by PR #2.
 
-Validation: 105 tests in 14 suites passed; both benchmarks passed. TypeScript and
+Validation: 130 tests in 17 suites passed; both benchmarks passed. TypeScript and
 repository-wide ESLint passed. Production build succeeded with existing dependency
 source-map warnings and a large-bundle advisory. No browser automation was used.

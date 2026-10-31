@@ -285,9 +285,36 @@ export default class Oscar {
         (combination) => this.metrics(combination).idleMinutes
       ),
       new SortingOption('Efficient Week', (combination) => {
-        const { classDays, idleMinutes, unknownTrips, walkingSeconds } =
-          this.metrics(combination);
-        return [classDays, idleMinutes, unknownTrips, walkingSeconds];
+        const {
+          classDays,
+          idleMinutes,
+          weeklySpanMinutes,
+          unknownTrips,
+          walkingSeconds,
+        } = this.metrics(combination);
+        return [
+          classDays,
+          idleMinutes,
+          weeklySpanMinutes,
+          unknownTrips,
+          walkingSeconds,
+        ];
+      }),
+      new SortingOption('Shortest Class Week', (combination) => {
+        const {
+          classDays,
+          weeklySpanMinutes,
+          idleMinutes,
+          unknownTrips,
+          walkingSeconds,
+        } = this.metrics(combination);
+        return [
+          classDays,
+          weeklySpanMinutes,
+          idleMinutes,
+          unknownTrips,
+          walkingSeconds,
+        ];
       }),
     ];
   }

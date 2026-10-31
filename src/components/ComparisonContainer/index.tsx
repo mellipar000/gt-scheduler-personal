@@ -93,6 +93,16 @@ export default function ComparisonContainer({
 
   const accountContext = useContext(AccountContext);
 
+  useEffect(() => setDeleteConfirm(null), [term, currentVersion]);
+  useEffect(() => {
+    if (
+      deleteConfirm?.type === 'Version' &&
+      !allVersionNames.some(({ id }) => id === deleteConfirm.id)
+    ) {
+      setDeleteConfirm(null);
+    }
+  }, [deleteConfirm, allVersionNames]);
+
   useEffect(() => {
     const newColorMap = { ...colorMap };
     allVersionNames.forEach((versionName) => {
@@ -847,6 +857,11 @@ function ComparisonModal({
           <p>
             Are you sure you want to delete schedule &ldquo;
             {deleteConfirm?.name ?? '<unknown>'}&rdquo;?
+          </p>
+          <p>
+            This removes this version&apos;s courses, sections, and events.
+            Other schedules are kept. If this is your last schedule, an empty
+            Primary schedule will be created.
           </p>
         </div>
       )}

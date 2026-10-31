@@ -1,4 +1,10 @@
-import React, { useCallback, useContext, useMemo, useState } from 'react';
+import React, {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 
 import { classes } from '../../utils/misc';
 import {
@@ -37,7 +43,12 @@ export default function Scheduler(): React.ReactElement {
     [overlayCrns, setOverlayCrns]
   );
 
-  const [{ currentVersion }] = useContext(ScheduleContext);
+  const [
+    { currentVersion, term, pinnedCrns, desiredCourses, excludedCrns, events },
+  ] = useContext(ScheduleContext);
+  useEffect(() => {
+    setOverlayCrns([]);
+  }, [term, currentVersion, pinnedCrns, desiredCourses, excludedCrns, events]);
 
   const { compare, pinned, pinSelf, expanded, setCompareState } =
     useCompareStateFromStorage({ pinDefault: [currentVersion] });

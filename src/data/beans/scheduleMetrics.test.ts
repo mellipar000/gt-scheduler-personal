@@ -39,6 +39,7 @@ it('orders every meeting chronologically and includes multiple meetings per sect
   expect(metrics).toEqual({
     classDays: 1,
     idleMinutes: 140,
+    weeklySpanMinutes: 290,
     unknownTrips: 0,
     walkingSeconds:
       (getTravel(locationA, locationB) ?? 0) +
@@ -59,6 +60,7 @@ it('only connects meetings that occur on the same actual date', () => {
   ).toEqual({
     classDays: 1,
     idleMinutes: 0,
+    weeklySpanMinutes: 50,
     unknownTrips: 0,
     walkingSeconds: 0,
   });
@@ -90,6 +92,7 @@ it('excludes async meetings and remote class days, but counts synchronous gaps',
   ).toEqual({
     classDays: 0,
     idleMinutes: 50,
+    weeklySpanMinutes: 0,
     unknownTrips: 0,
     walkingSeconds: 0,
   });
@@ -108,4 +111,46 @@ it('distinguishes missing and unknown routes from confirmed zero walking time', 
       ]),
     ]).unknownTrips
   ).toBe(2);
+});
+
+it('measures the longest Monday–Sunday class span within a week, including single-day weeks', () => {
+  const monday = meeting(540, 590);
+  const friday = meeting(960, 1020, {
+    days: ['F'],
+    dateRange: { from: new Date(2026, 7, 28), to: new Date(2026, 7, 28) },
+  });
+  expect(scheduleMetrics([section([monday, friday])]).weeklySpanMinutes).toBe(
+    6240
+  );
+  expect(scheduleMetrics([section([monday])]).weeklySpanMinutes).toBe(50);
+});
+
+it('never connects partial-term meetings across instructional weeks', () => {
+  const meetings = [
+    meeting(540, 590),
+    meeting(960, 1020, {
+      days: ['F'],
+      dateRange: { from: new Date(2026, 8, 4), to: new Date(2026, 8, 4) },
+    }),
+  ];
+  expect(scheduleMetrics([section(meetings)]).weeklySpanMinutes).toBe(60);
+  expect(scheduleMetrics([]).weeklySpanMinutes).toBe(0);
+});
+
+it('clips recurring meetings to partial week date ranges and excludes async/remote span', () => {
+  const partial = meeting(540, 590, {
+    days: ['M', 'F'],
+    dateRange: { from: new Date(2026, 7, 25), to: new Date(2026, 7, 28) },
+  });
+  const full = meeting(480, 1200, {
+    days: ['M', 'T', 'W', 'R', 'F'],
+    dateRange: { from: new Date(2026, 7, 24), to: new Date(2026, 8, 20) },
+  });
+  expect(
+    scheduleMetrics([
+      section([partial]),
+      section([full], 'Remote Asynchronous Course'),
+      section([full], 'Remote Synchronous Course'),
+    ]).weeklySpanMinutes
+  ).toBe(50);
 });

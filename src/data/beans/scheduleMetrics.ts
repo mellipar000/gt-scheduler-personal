@@ -6,6 +6,7 @@ import { getTravel } from '../../utils/mapbox/misc';
 export interface ScheduleMetrics {
   classDays: number;
   idleMinutes: number;
+  weeklySpanMinutes: number;
   unknownTrips: number;
   walkingSeconds: number;
 }
@@ -48,6 +49,7 @@ export default function scheduleMetrics(
     { meeting: Meeting; physical: boolean; period: Period }[]
   >();
   const weekdays = new Set<number>();
+  const weeks = new Map<number, { start: number; end: number }>();
   sections.forEach((section) => {
     if (section.deliveryMode === ASYNC_DELIVERY_MODE) return;
     section.meetings.forEach((meeting) => {
@@ -57,6 +59,17 @@ export default function scheduleMetrics(
       meetingDates(meeting).forEach((date) => {
         const weekday = new Date(date * 86400000).getUTCDay();
         if (physical && weekday >= 1 && weekday <= 5) weekdays.add(weekday);
+        if (physical) {
+          // Instructional weeks run Monday–Sunday, including partial weeks.
+          const week = date - ((weekday + 6) % 7);
+          const start = (date - week) * 1440 + period.start;
+          const end = (date - week) * 1440 + period.end;
+          const span = weeks.get(week);
+          weeks.set(week, {
+            start: Math.min(span?.start ?? start, start),
+            end: Math.max(span?.end ?? end, end),
+          });
+        }
         const timeline = timelines.get(date) ?? [];
         timeline.push({ meeting, physical, period });
         timelines.set(date, timeline);
@@ -89,6 +102,11 @@ export default function scheduleMetrics(
   return {
     classDays: weekdays.size,
     idleMinutes,
+    // Minimize the longest actual class week, never the semester-wide span.
+    weeklySpanMinutes: Math.max(
+      0,
+      ...Array.from(weeks.values(), ({ start, end }) => end - start)
+    ),
     unknownTrips,
     walkingSeconds,
   };
