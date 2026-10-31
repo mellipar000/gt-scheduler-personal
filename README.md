@@ -70,3 +70,5 @@ The GT Scheduler project welcomes (and encourages) contributions from the commun
 More information on how to contribute can be found [in the contributing guide](/CONTRIBUTING.md).
 
 See [schedule optimization and GPA notes](SCHEDULE_OPTIMIZATION.md) for ranking semantics, source investigation, benchmarks, and manual QA.
+
+Use the [local JSON scheduling harness](HARNESS.md) to inspect courses, search ranked alternatives, and safely transfer schedule versions without browser automation.

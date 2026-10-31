@@ -167,6 +167,7 @@ export default function CombinationContainer({
 
       <Modal
         show={confirmReset}
+        animate={false}
         onHide={(): void => setConfirmReset(false)}
         buttons={[
           {

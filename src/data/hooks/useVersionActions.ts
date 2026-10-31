@@ -7,9 +7,11 @@ import {
   defaultSchedule,
   generateScheduleVersionId,
   TermScheduleData,
+  Schedule,
 } from '../types';
 
 export type HookResult = {
+  importVersion: (name: string, schedule: Schedule) => string;
   addNewVersion: (name: string, select?: boolean) => string;
   deleteVersion: (id: string) => void;
   renameVersion: (id: string, newName: string) => void;
@@ -34,6 +36,22 @@ export default function useVersionActions({
   setVersion: (next: string) => void;
   currentVersion: string;
 }): HookResult {
+  const importVersion = useCallback(
+    (name: string, schedule: Schedule): string => {
+      const id = generateScheduleVersionId();
+      updateTermScheduleData((draft) => {
+        draft.versions[id] = {
+          name,
+          schedule,
+          friends: {},
+          createdAt: new Date().toISOString(),
+        };
+      });
+      setVersion(id);
+      return id;
+    },
+    [updateTermScheduleData, setVersion]
+  );
   // Create an `addNewVersion` function.
   // Returns the ID of the created schedule version.
   const addNewVersion = useCallback(
@@ -226,6 +244,7 @@ export default function useVersionActions({
   );
 
   return {
+    importVersion,
     addNewVersion,
     deleteVersion,
     renameVersion,

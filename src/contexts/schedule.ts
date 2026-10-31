@@ -29,6 +29,7 @@ export type ScheduleContextData = Immutable<Schedule> &
   } & Immutable<TermScheduleData>;
 
 export type ScheduleContextSetters = {
+  importVersion?: (name: string, schedule: Schedule) => string;
   setTerm: (next: string) => void;
   patchSchedule: (patch: Partial<Schedule>) => void;
   updateSchedule: (

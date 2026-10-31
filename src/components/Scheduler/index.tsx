@@ -22,6 +22,7 @@ import { DESKTOP_BREAKPOINT } from '../../constants';
 import useCompareStateFromStorage from '../../data/hooks/useCompareStateFromStorage';
 import useScreenWidth from '../../hooks/useScreenWidth';
 import ScheduleContainer from '../ScheduleContainer';
+import ScheduleTransferControls from '../ScheduleTransfer';
 
 import './stylesheet.scss';
 
@@ -72,6 +73,7 @@ export default function Scheduler(): React.ReactElement {
 
   return (
     <>
+      <ScheduleTransferControls key={`${term}:${currentVersion}`} />
       {mobile && (
         <div className="tab-container">
           {['Courses', 'Combinations', 'Calendar'].map((tabTitle, i) => (

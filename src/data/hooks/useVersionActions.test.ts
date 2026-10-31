@@ -5,6 +5,42 @@ import useVersionActions from './useVersionActions';
 import { defaultSchedule, TermScheduleData } from '../types';
 import { disableLogging } from '../../utils/tests';
 
+it('appends and selects an imported version while preserving existing schedules and shares', () => {
+  const saved = {
+    name: 'Saved',
+    createdAt: '2026-10-31',
+    friends: {},
+    schedule: castDraft(defaultSchedule),
+  };
+  let data: TermScheduleData = { versions: { saved } };
+  const setVersion = jest.fn();
+  const { result } = renderHook(() =>
+    useVersionActions({
+      currentVersion: 'saved',
+      setVersion,
+      updateTermScheduleData: (apply) => {
+        data = produce(data, apply);
+      },
+    })
+  );
+  const imported = {
+    ...castDraft(defaultSchedule),
+    desiredCourses: ['AE 2610'],
+    pinnedCrns: ['86554', '84092'],
+  };
+  act(() => {
+    result.current.importVersion('Alternative', imported);
+  });
+  expect(data.versions['saved']).toEqual(saved);
+  expect(Object.keys(data.versions)).toHaveLength(2);
+  const id = Object.keys(data.versions).find(
+    (key) => key !== 'saved'
+  ) as string;
+  expect(data.versions[id]?.schedule).toEqual(imported);
+  expect(data.versions[id]?.friends).toEqual({});
+  expect(setVersion).toHaveBeenCalledWith(id);
+});
+
 it('defaults only new schedules to Efficient Week and preserves saved and cloned preferences', () => {
   let data: TermScheduleData = {
     versions: {
