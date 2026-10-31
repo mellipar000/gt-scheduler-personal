@@ -48,9 +48,23 @@ export type ICS = {
 };
 
 export interface Combination {
+  // Additional CRNs; the full schedule also includes the caller's pinned CRNs.
   crns: string[];
   startMap: Record<string, number>;
   endMap: Record<string, number>;
+}
+
+export interface CombinationResult {
+  combinations: Combination[];
+  diagnostics: string[];
+}
+
+/** Complete registration alternatives verified against OSCAR for this term. */
+export interface RegistrationRequirements {
+  status: 'complete' | 'unknown';
+  source: string;
+  // Each alternative includes every required CRN, including the anchor section.
+  bundles: string[][];
 }
 
 export interface Period {
@@ -367,7 +381,8 @@ export type CrawlerCourse = [
    */
   description: string | null,
   // ! Type had `undefined` explicitly added to ensure we check when accessing
-  corequisites: CrawlerCorequisites | undefined
+  corequisites: CrawlerCorequisites | undefined,
+  registration?: RegistrationRequirements
 ];
 
 // TermData type (imported as `CrawlerTermData`):

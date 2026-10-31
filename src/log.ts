@@ -101,7 +101,10 @@ export function softError(error: ErrorWithFields): void {
   error.logToConsole();
 
   // Report the error to Sentry if in production
-  if (process.env.NODE_ENV === 'production') {
+  if (
+    process.env.NODE_ENV === 'production' &&
+    process.env['REACT_APP_SENTRY_DSN']
+  ) {
     // Ensure we don't include `type` in the fields
     let fields = error.getAllFields();
     if (Object.keys(fields).includes('type')) {

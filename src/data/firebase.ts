@@ -25,7 +25,11 @@ const FRIEND_COLLECTION = 'friends';
  * To enable, supply the 5 Firebase config environment variables.
  */
 export const isAuthEnabled =
-  firebaseConfig.apiKey != null && firebaseConfig.apiKey !== '';
+  process.env['REACT_APP_ENABLE_FIREBASE'] === 'true' &&
+  !!firebaseConfig.apiKey &&
+  !!firebaseConfig.projectId &&
+  !!firebaseConfig.authDomain &&
+  !firebaseConfig.projectId.startsWith('gt-scheduler');
 
 /* eslint-disable import/no-mutable-exports */
 let auth: firebase.auth.Auth = null as unknown as firebase.auth.Auth;

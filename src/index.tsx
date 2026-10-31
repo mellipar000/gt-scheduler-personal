@@ -11,12 +11,15 @@ import 'react-tooltip/dist/react-tooltip.css';
 import './stylesheet.scss';
 
 // Only initialize sentry on production
-if (process.env.NODE_ENV === 'production') {
+if (
+  process.env.NODE_ENV === 'production' &&
+  process.env['REACT_APP_SENTRY_DSN']
+) {
   // eslint-disable-next-line no-console
   console.log('Initializing Sentry');
 
   Sentry.init({
-    dsn: 'https://8955ef982197469e97c7644a8c090db1@o552970.ingest.sentry.io/5679614',
+    dsn: process.env['REACT_APP_SENTRY_DSN'],
     integrations: [new Integrations.BrowserTracing()],
     tracesSampleRate: 1.0,
     ignoreErrors: ['ResizeObserver loop limit exceeded'],

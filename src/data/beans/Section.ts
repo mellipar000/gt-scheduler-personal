@@ -2,8 +2,12 @@ import axios from 'axios';
 import cheerio from 'cheerio';
 import { decode } from 'html-entities';
 
-import { unique } from '../../utils/misc';
-import { DELIVERY_MODES, BACKEND_BASE_URL } from '../../constants';
+import { unique, hasConflictBetweenMeetings } from '../../utils/misc';
+import {
+  DELIVERY_MODES,
+  BACKEND_BASE_URL,
+  ASYNC_DELIVERY_MODE,
+} from '../../constants';
 import Course from './Course';
 import Oscar from './Oscar';
 import { ErrorWithFields, softError } from '../../log';
@@ -70,6 +74,8 @@ export default class Section {
   gradeBasis: string;
 
   meetings: Meeting[];
+
+  schedulingIssue?: string;
 
   instructors: string[];
 
@@ -202,6 +208,36 @@ export default class Section {
         .map<string[]>(({ instructors }) => instructors)
         .reduce((accum, instructors) => [...accum, ...instructors], [])
     );
+
+    const isAsync = this.deliveryMode === ASYNC_DELIVERY_MODE;
+    if (
+      !this.crn ||
+      this.scheduleType === 'unknown' ||
+      (!this.meetings.length && !isAsync) ||
+      this.meetings.some((meeting, index) => {
+        const raw = meetings[index];
+        return (
+          !raw ||
+          !oscar.dateRanges[raw[5]] ||
+          !Number.isFinite(meeting.dateRange.from.getTime()) ||
+          !Number.isFinite(meeting.dateRange.to.getTime()) ||
+          meeting.dateRange.from > meeting.dateRange.to ||
+          (meeting.days.length > 0 &&
+            (!meeting.period ||
+              !Number.isFinite(meeting.period.start) ||
+              !Number.isFinite(meeting.period.end) ||
+              meeting.period.start >= meeting.period.end ||
+              meeting.days.some((day) => !'MTWRFSU'.includes(day)))) ||
+          (!meeting.days.length && !isAsync) ||
+          this.meetings
+            .slice(0, index)
+            .some((other) => hasConflictBetweenMeetings(meeting, other))
+        );
+      })
+    ) {
+      this.schedulingIssue =
+        'Meeting times, days, dates, or section data are missing or invalid.';
+    }
 
     // These fields are initialized after construction
     // inside `Course.constructor`

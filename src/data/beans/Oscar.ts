@@ -8,10 +8,12 @@ import SortingOption from './SortingOption';
 import {
   hasConflictBetween,
   hasConflictBetweenSectionAndEvent,
+  hasConflictBetweenMeetings,
   stringToTime,
 } from '../../utils/misc';
 import {
   Combination,
+  CombinationResult,
   Period,
   DateRange,
   Location,
@@ -80,7 +82,15 @@ export default class Oscar {
       }
 
       const periodSegments = period.split(' - ');
-      if (periodSegments.length !== 2) {
+      if (
+        periodSegments.length !== 2 ||
+        periodSegments.some(
+          (value) =>
+            !/^\d{3,4}$/.test(value) ||
+            Number(value.slice(-2)) > 59 ||
+            Number(value.slice(0, -2)) > 23
+        )
+      ) {
         softError(
           new ErrorWithFields({
             message: 'period did not follow expected format',
@@ -142,7 +152,7 @@ export default class Oscar {
           })
         );
         // We need some fallback here
-        segments = ['1/1/1970', '1/2/1970'];
+        segments = ['', ''];
       }
 
       const [from, to] = segments.map((v) => new Date(v)) as [Date, Date];
@@ -271,6 +281,7 @@ export default class Oscar {
     data: OscarConstructionDate,
     term: string
   ): Promise<Oscar> {
+    if (!CLOUD_FUNCTION_BASE_URL) return new Oscar(data, term);
     const url = `${PLANNED_COUNTS_API_URL}?term=${term}`;
     let plannedCounts: PlannedCountsData | undefined;
     try {
@@ -304,88 +315,189 @@ export default class Oscar {
     excludedCrns: readonly string[],
     events: Immutable<Event[]>
   ): Combination[] {
-    const crnsList: string[][] = [];
-    const dfs = (courseIndex = 0, crns: string[] = []): void => {
-      if (courseIndex === desiredCourses.length) {
-        crnsList.push(crns);
-        return;
+    return this.getCombinationResult(
+      desiredCourses,
+      pinnedCrns,
+      excludedCrns,
+      events
+    ).combinations;
+  }
+
+  getCombinationResult(
+    desiredCourses: readonly string[],
+    pinnedCrns: readonly string[],
+    excludedCrns: readonly string[],
+    events: Immutable<Event[]>
+  ): CombinationResult {
+    const diagnostics: string[] = [];
+    const fail = (message: string): CombinationResult => ({
+      combinations: [],
+      diagnostics: [message],
+    });
+    const pinned = new Set(pinnedCrns);
+    const excluded = new Set(excludedCrns);
+    const courseIds = Array.from(new Set(desiredCourses));
+    const pinnedSections: Section[] = [];
+    for (const crn of excludedCrns) {
+      if (!this.findSection(crn))
+        return fail(
+          `Excluded CRN ${crn} is missing from the course data. Refresh or clear the stale exclusion.`
+        );
+    }
+    for (const [index, event] of Array.from(events.entries())) {
+      if (
+        !event.days.length ||
+        event.days.some((day) => !'MTWRFSU'.includes(day)) ||
+        !Number.isFinite(event.period.start) ||
+        !Number.isFinite(event.period.end) ||
+        event.period.start < 0 ||
+        event.period.end > 1440 ||
+        event.period.start >= event.period.end
+      ) {
+        return fail(
+          `Recurring event "${event.name}" has missing or invalid days or times.`
+        );
       }
-      const courseId = desiredCourses[courseIndex];
-      if (courseId === undefined) return;
-      const course = this.findCourse(courseId);
-      if (course === undefined) return;
-      const isIncluded = (section: Section): boolean =>
-        !excludedCrns.includes(section.crn);
-      const isPinned = (section: Section): boolean =>
-        pinnedCrns.includes(section.crn);
-      const hasConflict = (section: Section): boolean =>
-        [...pinnedCrns, ...crns].some((crn) => {
-          const crnSection = this.findSection(crn);
-          if (crnSection === undefined) return false;
-          return hasConflictBetween(crnSection, section);
-        }) ||
+      if (
+        events
+          .slice(0, index)
+          .some((other) => hasConflictBetweenMeetings(event, other))
+      ) {
+        return fail(
+          `Recurring event "${event.name}" conflicts with another recurring event.`
+        );
+      }
+    }
+    for (const crn of Array.from(pinned)) {
+      const section = this.findSection(crn);
+      if (!section)
+        return fail(`Pinned CRN ${crn} is missing from the course data.`);
+      if (excluded.has(crn))
+        return fail(`CRN ${crn} is both pinned and excluded.`);
+      if (!courseIds.includes(section.course.id)) {
+        return fail(
+          `Pinned CRN ${crn} belongs to ${section.course.id}, which is not requested.`
+        );
+      }
+      if (section.schedulingIssue)
+        return fail(
+          `${section.course.id} (${crn}): ${section.schedulingIssue}`
+        );
+      if (
+        pinnedSections.some((other) => hasConflictBetween(other, section)) ||
         events.some((event) =>
           hasConflictBetweenSectionAndEvent(section, event)
+        )
+      ) {
+        return fail(
+          `Pinned CRN ${crn} conflicts with another pinned section or recurring event.`
         );
-      if (course.hasLab) {
-        // If a course has a lab, then `onlyLectures`, `onlyLabs`,
-        // and `allInOnes` should be non-undefined, but we have to check
-        // anyways here to satisfy TypeScript
-        const pinnedOnlyLecture = (course.onlyLectures ?? []).find(isPinned);
-        const pinnedOnlyLab = (course.onlyLabs ?? []).find(isPinned);
-        const pinnedAllInOne = (course.allInOnes ?? []).find(isPinned);
-        if ((pinnedOnlyLecture && pinnedOnlyLab) || pinnedAllInOne) {
-          dfs(courseIndex + 1, crns);
-        } else if (pinnedOnlyLecture) {
-          pinnedOnlyLecture.associatedLabs.filter(isIncluded).forEach((lab) => {
-            if (hasConflict(lab)) return;
-            dfs(courseIndex + 1, [...crns, lab.crn]);
-          });
-        } else if (pinnedOnlyLab) {
-          pinnedOnlyLab.associatedLectures
-            .filter(isIncluded)
-            .forEach((lecture) => {
-              if (hasConflict(lecture)) return;
-              dfs(courseIndex + 1, [...crns, lecture.crn]);
-            });
-        } else {
-          let progressed = false;
-          (course.onlyLectures ?? []).filter(isIncluded).forEach((lecture) => {
-            if (hasConflict(lecture)) return;
-            const validLabs = (lecture.associatedLabs ?? []).filter(isIncluded);
-            if (validLabs.length === 0) return;
-            validLabs.forEach((lab) => {
-              if (hasConflict(lab)) return;
-              progressed = true;
-              dfs(courseIndex + 1, [...crns, lecture.crn, lab.crn]);
-            });
-          });
+      }
+      pinnedSections.push(section);
+    }
 
-          // Prevents dfs stalling when no lecture-lab pairs exist
-          // (usually happens for VIPs) by ignoring the class altogether
-          if (!progressed) dfs(courseIndex + 1, crns);
-
-          (course.allInOnes ?? []).filter(isIncluded).forEach((section) => {
-            if (hasConflict(section)) return;
-            dfs(courseIndex + 1, [...crns, section.crn]);
-          });
+    // Build and validate each course's alternatives once, outside the search.
+    const choices: Section[][][] = [];
+    for (const courseId of courseIds) {
+      const course = this.findCourse(courseId);
+      if (!course)
+        return fail(
+          `${courseId}: Course data is missing or could not be read.`
+        );
+      if (course.registrationIssue)
+        return fail(`${courseId}: ${course.registrationIssue}`);
+      const requiredPins = pinnedSections.filter((s) => s.course === course);
+      let missingTimes = false;
+      const candidates = course.registrationBundles.filter((bundle) => {
+        if (
+          bundle.some((s) => excluded.has(s.crn)) ||
+          requiredPins.some((s) => !bundle.includes(s))
+        )
+          return false;
+        if (bundle.some((s) => s.schedulingIssue)) {
+          missingTimes = true;
+          return false;
         }
-      } else if (course.sections.some(isPinned)) {
-        dfs(courseIndex + 1, crns);
-      } else {
-        // If a course does not have a lab, then `sectionGroups` should be
-        // non-undefined, but we have to check anyways here to satisfy
-        // TypeScript
-        Object.values(course.sectionGroups ?? {}).forEach((sectionGroup) => {
-          if (sectionGroup == null) return;
-          const section = sectionGroup.sections.find(isIncluded);
-          if (!section || hasConflict(section)) return;
-          dfs(courseIndex + 1, [...crns, section.crn]);
-        });
+        return !bundle.some(
+          (section, i) =>
+            bundle
+              .slice(0, i)
+              .some((other) => hasConflictBetween(other, section)) ||
+            pinnedSections.some(
+              (other) => other !== section && hasConflictBetween(other, section)
+            ) ||
+            events.some((event) =>
+              hasConflictBetweenSectionAndEvent(section, event)
+            )
+        );
+      });
+      if (missingTimes)
+        diagnostics.push(
+          `${courseId}: Sections with missing meeting data were rejected; their time conflicts cannot be checked.`
+        );
+      if (!candidates.length) {
+        return {
+          combinations: [],
+          diagnostics: [
+            ...diagnostics,
+            `${courseId}: No complete registration option satisfies the pinned sections, exclusions, linked-section requirements, and time constraints.`,
+          ],
+        };
+      }
+      // Preserve one representative per equivalent timetable, but only AFTER
+      // checking pins, exclusions, dates and every component in each bundle.
+      const seen = new Set<string>();
+      choices.push(
+        candidates
+          .filter((bundle) => {
+            if (bundle.length > 1) return true;
+            const key = JSON.stringify(
+              bundle.flatMap((s) =>
+                s.meetings.map(({ days, period, dateRange }) => ({
+                  days,
+                  period,
+                  dateRange,
+                }))
+              )
+            );
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          })
+          .map((bundle) => bundle.filter((s) => !pinned.has(s.crn)))
+      );
+    }
+
+    const crnsList: string[][] = [];
+    const conflicts = new Map<string, boolean>();
+    const conflict = (a: Section, b: Section): boolean => {
+      const key = [a.crn, b.crn].sort().join(',');
+      let value = conflicts.get(key);
+      if (value === undefined) {
+        value = hasConflictBetween(a, b);
+        conflicts.set(key, value);
+      }
+      return value;
+    };
+    const dfs = (courseIndex: number, selected: Section[]): void => {
+      if (courseIndex === choices.length) {
+        crnsList.push(selected.map((s) => s.crn));
+        return;
+      }
+      for (const bundle of choices[courseIndex] ?? []) {
+        if (!bundle.some((s) => selected.some((other) => conflict(s, other)))) {
+          dfs(courseIndex + 1, [...selected, ...bundle]);
+        }
       }
     };
-    dfs();
-    return crnsList.map((crns) => {
+    dfs(0, []);
+    if (!crnsList.length)
+      diagnostics.push(
+        `No complete schedule exists for ${courseIds.join(
+          ', '
+        )}: every remaining registration combination has a time conflict. Try different pins, exclusions, or recurring events.`
+      );
+    const combinations = crnsList.map((crns) => {
       const startMap: Record<string, number> = {};
       const endMap: Record<string, number> = {};
       this.iterateTimeBlocks(
@@ -406,6 +518,7 @@ export default class Oscar {
         endMap,
       };
     });
+    return { combinations, diagnostics };
   }
 
   sortCombinations(
